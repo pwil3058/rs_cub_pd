@@ -12,12 +12,8 @@
 //See the License for the specific language governing permissions and
 //limitations under the License.
 
-pub use std::rc::Rc;
-
 pub mod abstract_diff;
-
-pub type Line = Rc<String>;
-
+pub mod lines;
 
 #[cfg(test)]
 mod tests {

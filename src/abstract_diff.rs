@@ -15,41 +15,17 @@
 use std::fmt;
 use std::io;
 use std::path::Path;
-use std::rc::Rc;
 
-use super::Line;
-
-// Does "lines" contain "sub_lines" starting at "index"?
-fn lines_contains_sub_lines_at(lines: &[Line], sub_lines: &[Line], index: usize) -> bool {
-    if sub_lines.len() + index > lines.len() {
-        return false
-    }
-    for i in 0..sub_lines.len() {
-        if sub_lines[i] != lines[i + index] {
-            return false
-        }
-    };
-    true
-}
-
-// Find index of the first instance of "sub_lines" in "lines" at or after "start_index"
-fn find_first_sub_lines(lines: &[Line], sub_lines: &[Line], start_index: usize) -> Option<usize> {
-    for index in start_index..start_index + lines.len() - sub_lines.len() + 1 {
-        if lines_contains_sub_lines_at(lines, sub_lines, index) {
-            return Some(index)
-        }
-    };
-    None
-}
+use crate::lines::*;
 
 trait ApplyOffset {
-    fn apply_offset(self, offset: i64) -> usize;
+    fn apply_offset(self, offset: i64) -> Self;
 }
 
 impl ApplyOffset for usize {
     fn apply_offset(self, offset: i64) -> usize {
         (self as i64 + offset) as usize
-    }    
+    }
 }
 
 pub struct AbstractChunk {
@@ -63,16 +39,16 @@ impl AbstractChunk {
     }
 
     // Do "lines" match this chunk?
-    fn matches_lines(&self, lines: &[Line], offset: i64) -> bool {
+    fn matches_lines(&self, lines: &Lines, offset: i64) -> bool {
         let start_index = self.start_index.apply_offset(offset);
-        lines_contains_sub_lines_at(lines, &self.lines, start_index)
+        lines.contains_sub_lines_at(&self.lines, start_index)
     }
 }
 
 const BEFORE: usize = 0;
 const AFTER: usize = 1;
 const FUZZ_FACTOR: usize = 2;
- 
+
 pub struct AbstractHunk {
     chunk: [AbstractChunk; 2],
     ante_context_len: usize,
@@ -83,7 +59,7 @@ pub struct CompromisedPosnData {
     start_index: usize,
     ante_context_redn: usize,
     post_context_redn: usize
-    
+
 }
 
 #[derive(Debug)]
@@ -102,21 +78,21 @@ impl AbstractHunk {
     // If it exists find the position in "lines" where this hunk will
     // apply reducing context if/as necessary.  Return the position
     // and any context reductions that were used.
-    fn get_compromised_posn(&self, lines: &[Line], start_index: usize, fuzz_factor: usize, reverse: bool) -> Option<CompromisedPosnData> {
+    fn get_compromised_posn(&self, lines: &Lines, start_index: usize, fuzz_factor: usize, reverse: bool) -> Option<CompromisedPosnData> {
         for context_redn in 0..fuzz_factor.min(self.ante_context_len.max(self.post_context_len)) + 1 {
             let ante_context_redn = context_redn.min(self.ante_context_len);
             let post_context_redn = context_redn.min(self.post_context_len);
             let fm = ante_context_redn;
             let before = if reverse { AFTER } else { BEFORE };
             let to = self.chunk[before].lines.len() - post_context_redn;
-            if let Some(start_index) = find_first_sub_lines(lines, &self.chunk[before].lines[fm..to], start_index) {
+            if let Some(start_index) = lines.find_first_sub_lines(&self.chunk[before].lines[fm..to], start_index) {
                 return Some(CompromisedPosnData{start_index, ante_context_redn, post_context_redn})
             }
         };
         None
     }
 
-    // Return the before applied position data for this hunk.
+    // Calculate the applied position data for this hunk from provided data.
     fn get_applied_posn(&self, end_posn: usize, post_context_redn: usize, reverse: bool) -> AppliedPosnData {
         let after = if reverse { BEFORE } else { AFTER };
         let length = self.chunk[after].lines.len() - self.ante_context_len - self.post_context_len;
@@ -124,7 +100,7 @@ impl AbstractHunk {
         AppliedPosnData{start_posn, length}
     }
 
-    fn is_already_applied(&self, lines: &[Line], offset: i64, reverse: bool) -> bool {
+    fn is_already_applied(&self, lines: &Lines, offset: i64, reverse: bool) -> bool {
         let (before, after) = if reverse { (AFTER, BEFORE) } else { (BEFORE, AFTER) };
         let fr_offset = self.chunk[before].start_index as i64 - self.chunk[after].start_index as i64;
         self.chunk[after].matches_lines(lines, fr_offset + offset)
@@ -162,7 +138,7 @@ pub struct AbstractDiff {
 
 impl AbstractDiff {
     // Apply this diff to lines
-    pub fn apply_to_lines<W>(&self, lines: &[Line], reverse: bool, err_w: &mut W, repd_file_path: Option<&Path>) -> ApplnResult
+    pub fn apply_to_lines<W>(&self, lines: &Lines, reverse: bool, err_w: &mut W, repd_file_path: Option<&Path>) -> ApplnResult
         where W: io::Write
     {
         let mut result = ApplnResult::default();
@@ -239,17 +215,17 @@ impl AbstractDiff {
                 result.lines.push(line.clone())
             }
             lines_index = end_index;
-            result.lines.push(Rc::new(String::from("<<<<<<<")));
+            result.lines.push(Line::conflict_start_marker());
             let start_line = result.lines.len();
             for line in &lines[lines_index..lines_index + before_hlen] {
                 result.lines.push(line.clone())
             }
             lines_index += before_hlen;
-            result.lines.push(Rc::new(String::from("=======<")));
+            result.lines.push(Line::conflict_separation_marker());
             for line in &hunk.chunk[after].lines[..hunk.len_minus_post_context(reverse)] {
                 result.lines.push(line.clone())
             }
-            result.lines.push(Rc::new(String::from(">>>>>>>")));
+            result.lines.push(Line::conflict_end_marker());
             let end_line = result.lines.len();
             if let Some(file_path) = repd_file_path {
                 write!(err_w, "{:?}: Hunk #{} NOT MERGED at {}-{}.\n", file_path, hunk_index + 1, start_line, end_line).unwrap();
