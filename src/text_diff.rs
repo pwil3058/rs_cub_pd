@@ -17,19 +17,33 @@ use std::path::PathBuf;
 use regex::Regex;
 
 use crate::lines::*;
+use crate::DiffFormat;
 
 // TODO: implement Error for DiffParseError
 pub enum DiffParseError {
     MissingAfterFileData(usize),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct PathAndTimestamp {
     file_path: PathBuf,
     time_stamp: Option<String>,
 }
 
-pub trait TextDiffParser<H, D> {
+pub struct TextDiffHeader {
+    pub lines: Lines,
+    pub before_pat: PathAndTimestamp,
+    pub after_pat: PathAndTimestamp
+}
+
+pub struct TextDiff<H> {
+    pub diff_format: DiffFormat,
+    pub header: TextDiffHeader,
+    pub hunks: Vec<H>
+}
+
+pub trait TextDiffParser<H> {
+    fn diff_format(&self) -> DiffFormat;
     fn before_file_cre(&self) -> Regex;
     fn after_file_cre(&self) -> Regex;
     fn get_hunk_at(&self, lines: &Lines, index: usize) -> (Option<H>, usize);
@@ -60,12 +74,49 @@ pub trait TextDiffParser<H, D> {
         self._get_file_data_at(&self.after_file_cre(), lines, index)
     }
 
-    fn get_diff_at(&self, lines: Lines, start_index: usize, fail_if_malformed: bool) -> Result<(Option<D>, usize), DiffParseError> {
+    fn get_diff_at(&self, lines: Lines, start_index: usize, fail_if_malformed: bool) -> Result<(Option<TextDiff<H>>, usize), DiffParseError> {
         if lines.len() - start_index < 2 {
             return Ok((None, start_index))
         }
-        // TODO: finish implementing get_diff_at()
-        Ok((None, start_index))
+        let mut index = start_index;
+        let (data, new_index) = self.get_before_file_data_at(&lines, index);
+        index = new_index;
+        let before_file_data = if let Some(bfd) = data {
+            bfd
+        } else {
+            return Ok((None, start_index))
+        };
+        let (data, new_index) = self.get_after_file_data_at(&lines, index);
+        index = new_index;
+        let after_file_data = if let Some(afd) = data {
+            afd
+        } else {
+            if fail_if_malformed {
+                return Err(DiffParseError::MissingAfterFileData(index))
+            } else {
+                return Ok((None, start_index))
+            }
+        };
+        let mut hunks: Vec<H> = Vec::new();
+        while index < lines.len() {
+            let (o_hunk, new_index) = self.get_hunk_at(&lines, index);
+            index = new_index;
+            match o_hunk {
+                Some(hunk) => hunks.push(hunk),
+                None => break
+            }
+        }
+        let header = TextDiffHeader {
+            lines: lines[start_index..start_index + 2].to_vec(),
+            before_pat: before_file_data,
+            after_pat: after_file_data,
+        };
+        let diff = TextDiff::<H> {
+            diff_format: self.diff_format(),
+            header,
+            hunks
+        };
+        Ok((Some(diff), index))
     }
 }
 
@@ -74,14 +125,16 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    const TIMESTAMP_RE_STR: &str = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{9})? [-+]{1}\d{4}";
-    const ALT_TIMESTAMP_RE_STR: &str = r"[A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{2}:\d{2}:\d{2} \d{4} [-+]{1}\d{4}";
-    const PATH_RE_STR: &str = r###""([^"]+)"|(\S+)"###;
+    use crate::{TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR, PATH_RE_STR};
 
     #[derive(Debug, Default)]
     struct DummyDiffParser {}
 
-    impl TextDiffParser<i32, i32> for DummyDiffParser {
+    impl TextDiffParser<i32> for DummyDiffParser {
+        fn diff_format(&self) -> DiffFormat {
+            DiffFormat::Unified
+        }
+        
         fn before_file_cre(&self) -> Regex {
             let e_ts_re_str = format!("({}|{})", TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR);
             let e = format!(r"^--- ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
@@ -94,7 +147,7 @@ mod tests {
             Regex::new(&e).unwrap()
         }
 
-        fn get_hunk_at(&self, lines: &Lines, index: usize) -> (Option<i32>, usize) {
+        fn get_hunk_at(&self, _lines: &Lines, index: usize) -> (Option<i32>, usize) {
             (None, index)
         }
     }
