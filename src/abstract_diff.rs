@@ -17,16 +17,7 @@ use std::io;
 use std::path::Path;
 
 use crate::lines::*;
-
-trait ApplyOffset {
-    fn apply_offset(self, offset: i64) -> Self;
-}
-
-impl ApplyOffset for usize {
-    fn apply_offset(self, offset: i64) -> usize {
-        (self as i64 + offset) as usize
-    }
-}
+use crate::ApplyOffset;
 
 pub struct AbstractChunk {
     start_index: usize,
