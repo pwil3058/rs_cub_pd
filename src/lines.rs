@@ -12,26 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub use std::rc::Rc;
+pub use std::sync::Arc;
 
-pub type Line = Rc<String>;
+pub type Line = Arc<String>;
 pub type Lines = Vec<Line>;
 
 pub trait LineIfce {
     fn new(s: &str) -> Line {
-        Rc::new(String::from(s))
+        Arc::new(String::from(s))
     }
 
     fn conflict_start_marker() -> Line {
-        Rc::new(String::from("<<<<<<<"))
+        Arc::new(String::from("<<<<<<<"))
     }
 
     fn conflict_separation_marker() -> Line {
-        Rc::new(String::from("======="))
+        Arc::new(String::from("======="))
     }
 
     fn conflict_end_marker() -> Line {
-        Rc::new(String::from(">>>>>>>"))
+        Arc::new(String::from(">>>>>>>"))
     }
 }
 
