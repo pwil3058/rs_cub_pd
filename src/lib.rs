@@ -12,8 +12,11 @@
 //See the License for the specific language governing permissions and
 //limitations under the License.
 
+extern crate regex;
+
 pub mod abstract_diff;
 pub mod lines;
+pub mod text_diff;
 
 trait ApplyOffset {
     fn apply_offset(self, offset: i64) -> Self;
