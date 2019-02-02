@@ -38,6 +38,7 @@ pub struct PathAndTimestamp {
     time_stamp: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct TextDiffHeader {
     pub lines: Lines,
     pub ante_pat: PathAndTimestamp,
@@ -98,7 +99,7 @@ pub trait TextDiffParser<C: TextDiffChunk> {
         Ok(Some(TextDiffHeader{lines, ante_pat, post_pat}))
     }
 
-    fn get_diff_at(&self, lines: Lines, start_index: usize) -> DiffParseResult<Option<TextDiff<C>>> {
+    fn get_diff_at(&self, lines: &Lines, start_index: usize) -> DiffParseResult<Option<TextDiff<C>>> {
         if lines.len() - start_index < 2 {
             return Ok(None)
         }
@@ -151,10 +152,10 @@ mod tests {
     impl TextDiffParser<i32> for DummyDiffParser {
         fn new() -> Self {
             let e_ts_re_str = format!("({}|{})", TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR);
-            let e = format!(r"^--- ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
+            let e = format!(r"(?s)^--- ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
             let ante_file_cre = Regex::new(&e).unwrap();
             let e_ts_re_str = format!("({}|{})", TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR);
-            let e = format!(r"^\+\+\+ ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
+            let e = format!(r"(?s)^\+\+\+ ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
             let post_file_cre = Regex::new(&e).unwrap();
             DummyDiffParser{ante_file_cre, post_file_cre}
         }
@@ -179,11 +180,11 @@ mod tests {
     #[test]
     fn get_file_data_works() {
         let mut lines: Lines = Vec::new();
-        lines.push(Line::new("--- /path/to/original".to_string()));
-        lines.push(Line::new("+++ /path/to/new".to_string()));
+        lines.push(Line::new("--- a/path/to/original\n".to_string()));
+        lines.push(Line::new("+++ b/path/to/new\n".to_string()));
         let ddp = DummyDiffParser::new();
         let tdh = ddp.get_text_diff_header_at(&lines, 0).unwrap().unwrap();
-        assert_eq!(tdh.ante_pat, PathAndTimestamp{file_path: PathBuf::from("/path/to/original"), time_stamp: None});
-        assert_eq!(tdh.post_pat, PathAndTimestamp{file_path: PathBuf::from("/path/to/new"), time_stamp: None});
+        assert_eq!(tdh.ante_pat, PathAndTimestamp{file_path: PathBuf::from("a/path/to/original"), time_stamp: None});
+        assert_eq!(tdh.post_pat, PathAndTimestamp{file_path: PathBuf::from("b/path/to/new"), time_stamp: None});
     }
 }

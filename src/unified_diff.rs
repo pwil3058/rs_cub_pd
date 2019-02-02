@@ -57,13 +57,13 @@ impl TextDiffParser<UnifiedDiffChunk> for UnifiedDiffParser {
     fn new() -> Self {
         let e_ts_re_str = format!("({}|{})", TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR);
 
-        let e = format!(r"^--- ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
+        let e = format!(r"(?s)^--- ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
         let ante_file_cre = Regex::new(&e).unwrap();
 
-        let e = format!(r"^\+\+\+ ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
+        let e = format!(r"(?s)^\+\+\+ ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
         let post_file_cre = Regex::new(&e).unwrap();
 
-        let hunk_data_cre = Regex::new(r"^@@\s+-(\d+)(,(\d+))?\s+\+(\d+)(,(\d+))?\s+@@\s*(.*)$").unwrap();
+        let hunk_data_cre = Regex::new(r"(?s)^@@\s+-(\d+)(,(\d+))?\s+\+(\d+)(,(\d+))?\s+@@\s*(.*)$").unwrap();
 
         UnifiedDiffParser{ante_file_cre, post_file_cre, hunk_data_cre}
     }
@@ -121,10 +121,20 @@ impl TextDiffParser<UnifiedDiffChunk> for UnifiedDiffParser {
 
 #[cfg(test)]
 mod tests {
-    //use super::*;
+    use super::*;
+    use std::path::Path;
+    use crate::lines::{Lines, LinesIfce};
 
     #[test]
     fn get_hunk_at_works() {
+        let lines = Lines::read(&Path::new("test_diffs/test_1.diff")).unwrap();
+        let parser = UnifiedDiffParser::new();
+        let result = parser.get_diff_at(&lines, 0);
+        assert!(result.is_ok());
+        assert!(!result.unwrap().is_some());
 
+        let result = parser.get_diff_at(&lines, 14);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_some());
     }
 }

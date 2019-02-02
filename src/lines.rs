@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fs::File;
+use std::io::prelude::*;
+use std::io::{self, BufReader};
+use std::path::Path;
 pub use std::sync::Arc;
 
 pub type Line = Arc<String>;
@@ -38,8 +42,24 @@ pub trait LineIfce {
 impl LineIfce for Line {}
 
 pub trait LinesIfce {
+    fn read(path: &Path) -> io::Result<Lines> {
+        let file = File::open(path)?;
+        let mut reader = BufReader::new(file);
+        let mut lines = vec![];
+        loop {
+            let mut line = String::new();
+            if reader.read_line(&mut line)? == 0 {
+                break
+            } else {
+                lines.push(Arc::new(line))
+            }
+        }
+        Ok(lines)
+    }
+    
     // Does we contain "sub_lines" starting at "index"?
     fn contains_sub_lines_at(&self, sub_lines: &[Line], index: usize) -> bool;
+
     // Find index of the first instance of "sub_lines" at or after "start_index"
     fn find_first_sub_lines(&self, sub_lines: &[Line], start_index: usize) -> Option<usize>;
 }
