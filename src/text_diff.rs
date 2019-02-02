@@ -14,15 +14,18 @@
 
 use std::path::PathBuf;
 
-use regex::Regex;
+use regex::Captures;
 
 use crate::lines::*;
 use crate::DiffFormat;
 
 // TODO: implement Error for DiffParseError
+#[derive(Debug)]
 pub enum DiffParseError {
     MissingAfterFileData(usize),
 }
+
+pub type DiffParseResult<T> = Result<T, DiffParseError>;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct PathAndTimestamp {
@@ -32,91 +35,85 @@ pub struct PathAndTimestamp {
 
 pub struct TextDiffHeader {
     pub lines: Lines,
-    pub before_pat: PathAndTimestamp,
-    pub after_pat: PathAndTimestamp
+    pub ante_pat: PathAndTimestamp,
+    pub post_pat: PathAndTimestamp
 }
 
-pub struct TextDiff<H> {
+pub trait TextDiffHunk {
+    fn num_lines(&self) -> usize;
+}
+
+pub struct TextDiff<H: TextDiffHunk> {
+    pub lines_consumed: usize,
     pub diff_format: DiffFormat,
     pub header: TextDiffHeader,
     pub hunks: Vec<H>
 }
 
-pub trait TextDiffParser<H> {
+pub trait TextDiffParser<H: TextDiffHunk> {
+    fn new() -> Self;
     fn diff_format(&self) -> DiffFormat;
-    fn before_file_cre(&self) -> Regex;
-    fn after_file_cre(&self) -> Regex;
-    fn get_hunk_at(&self, lines: &Lines, index: usize) -> (Option<H>, usize);
+    fn ante_file_rec<'t>(&self, line: &'t Line) -> Option<Captures<'t>>;
+    fn post_file_rec<'t>(&self, line: &'t Line) -> Option<Captures<'t>>;
+    fn get_hunk_at(&self, lines: &Lines, index: usize) -> DiffParseResult<Option<H>>;
 
-    fn _get_file_data_at(&self, cre: &Regex, lines: &Lines, index: usize) -> (Option<PathAndTimestamp>, usize) {
-        if let Some(captures) = cre.captures(&lines[index]) {
-            let file_path = if let Some(path) = captures.get(2) {
-                path.as_str()
-            } else {
-                captures.get(3).unwrap().as_str() // TODO: confirm unwrap is OK here
-            };
-            let file_path = PathBuf::from(file_path);
-            let time_stamp = if let Some(ts) = captures.get(4) {
-                Some(ts.as_str().to_string())
-            } else {
-                None
-            };
-            return (Some(PathAndTimestamp{file_path, time_stamp}), index + 1)
-        }
-        (None, index)
+    fn _get_file_data_fm_captures(&self, captures: &Captures) -> PathAndTimestamp {
+        let file_path = if let Some(path) = captures.get(2) {
+            path.as_str()
+        } else {
+            captures.get(3).unwrap().as_str() // TODO: confirm unwrap is OK here
+        };
+        let file_path = PathBuf::from(file_path);
+        let time_stamp = if let Some(ts) = captures.get(4) {
+            Some(ts.as_str().to_string())
+        } else {
+            None
+        };
+        PathAndTimestamp{file_path, time_stamp}
     }
 
-    fn get_before_file_data_at(&self, lines: &Lines, index: usize) -> (Option<PathAndTimestamp>, usize) {
-        self._get_file_data_at(&self.before_file_cre(), lines, index)
+    fn get_text_diff_header_at(&self, lines: &Lines, start_index: usize) -> DiffParseResult<Option<TextDiffHeader>> {
+        let ante_pat = if let Some(ref captures) = self.ante_file_rec(&lines[start_index]) {
+            self._get_file_data_fm_captures(captures)
+        } else {
+            return Ok(None)
+        };
+        let post_pat = if let Some(ref captures) = self.post_file_rec(&lines[start_index + 1]) {
+            self._get_file_data_fm_captures(captures)
+        } else {
+            return Err(DiffParseError::MissingAfterFileData(start_index))
+        };
+        let lines = lines[start_index..start_index + 2].to_vec();
+        Ok(Some(TextDiffHeader{lines, ante_pat, post_pat}))
     }
 
-    fn get_after_file_data_at(&self, lines: &Lines, index: usize) -> (Option<PathAndTimestamp>, usize) {
-        self._get_file_data_at(&self.after_file_cre(), lines, index)
-    }
-
-    fn get_diff_at(&self, lines: Lines, start_index: usize, fail_if_malformed: bool) -> Result<(Option<TextDiff<H>>, usize), DiffParseError> {
+    fn get_diff_at(&self, lines: Lines, start_index: usize) -> DiffParseResult<Option<TextDiff<H>>> {
         if lines.len() - start_index < 2 {
-            return Ok((None, start_index))
+            return Ok(None)
         }
         let mut index = start_index;
-        let (data, new_index) = self.get_before_file_data_at(&lines, index);
-        index = new_index;
-        let before_file_data = if let Some(bfd) = data {
-            bfd
+        let header = if let Some(header) = self.get_text_diff_header_at(&lines, index)? {
+            index += header.lines.len();
+            header
         } else {
-            return Ok((None, start_index))
-        };
-        let (data, new_index) = self.get_after_file_data_at(&lines, index);
-        index = new_index;
-        let after_file_data = if let Some(afd) = data {
-            afd
-        } else {
-            if fail_if_malformed {
-                return Err(DiffParseError::MissingAfterFileData(index))
-            } else {
-                return Ok((None, start_index))
-            }
+            return Ok(None)
         };
         let mut hunks: Vec<H> = Vec::new();
         while index < lines.len() {
-            let (o_hunk, new_index) = self.get_hunk_at(&lines, index);
-            index = new_index;
-            match o_hunk {
-                Some(hunk) => hunks.push(hunk),
-                None => break
+            if let Some(hunk) = self.get_hunk_at(&lines, index)? {
+                index += hunk.num_lines();
+                hunks.push(hunk);
+            } else {
+                break
             }
         }
-        let header = TextDiffHeader {
-            lines: lines[start_index..start_index + 2].to_vec(),
-            before_pat: before_file_data,
-            after_pat: after_file_data,
-        };
         let diff = TextDiff::<H> {
+            lines_consumed: index - start_index,
             diff_format: self.diff_format(),
             header,
             hunks
         };
-        Ok((Some(diff), index))
+        Ok(Some(diff))
     }
 }
 
@@ -124,31 +121,47 @@ pub trait TextDiffParser<H> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use regex::{Captures, Regex};
 
     use crate::{TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR, PATH_RE_STR};
 
-    #[derive(Debug, Default)]
-    struct DummyDiffParser {}
+    #[derive(Debug)]
+    struct DummyDiffParser {
+        ante_file_cre: Regex,
+        post_file_cre: Regex,
+    }
+
+    impl TextDiffHunk for i32 {
+        fn num_lines(&self) -> usize {
+            0
+        }
+    }
 
     impl TextDiffParser<i32> for DummyDiffParser {
+        fn new() -> Self {
+            let e_ts_re_str = format!("({}|{})", TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR);
+            let e = format!(r"^--- ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
+            let ante_file_cre = Regex::new(&e).unwrap();
+            let e_ts_re_str = format!("({}|{})", TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR);
+            let e = format!(r"^\+\+\+ ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
+            let post_file_cre = Regex::new(&e).unwrap();
+            DummyDiffParser{ante_file_cre, post_file_cre}
+        }
+
         fn diff_format(&self) -> DiffFormat {
             DiffFormat::Unified
         }
-        
-        fn before_file_cre(&self) -> Regex {
-            let e_ts_re_str = format!("({}|{})", TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR);
-            let e = format!(r"^--- ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
-            Regex::new(&e).unwrap()
+
+        fn ante_file_rec<'t>(&self, line: &'t Line) -> Option<Captures<'t>> {
+            self.ante_file_cre.captures(line)
         }
 
-        fn after_file_cre(&self) -> Regex {
-            let e_ts_re_str = format!("({}|{})", TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR);
-            let e = format!(r"^\+\+\+ ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
-            Regex::new(&e).unwrap()
+        fn post_file_rec<'t>(&self, line: &'t Line) -> Option<Captures<'t>> {
+            self.post_file_cre.captures(line)
         }
 
-        fn get_hunk_at(&self, _lines: &Lines, index: usize) -> (Option<i32>, usize) {
-            (None, index)
+        fn get_hunk_at(&self, _lines: &Lines, _index: usize) -> DiffParseResult<Option<i32>> {
+            Ok(None)
         }
     }
 
@@ -157,11 +170,9 @@ mod tests {
         let mut lines: Lines = Vec::new();
         lines.push(Line::new("--- /path/to/original".to_string()));
         lines.push(Line::new("+++ /path/to/new".to_string()));
-        let ddp = DummyDiffParser::default();
-        let index = 0;
-        let (bfd, index) = ddp.get_before_file_data_at(&lines, index);
-        assert_eq!(bfd, Some(PathAndTimestamp{file_path: PathBuf::from("/path/to/original"), time_stamp: None}));
-        let (afd, _) = ddp.get_after_file_data_at(&lines, index);
-        assert_eq!(afd, Some(PathAndTimestamp{file_path: PathBuf::from("/path/to/new"), time_stamp: None}));
+        let ddp = DummyDiffParser::new();
+        let tdh = ddp.get_text_diff_header_at(&lines, 0).unwrap().unwrap();
+        assert_eq!(tdh.ante_pat, PathAndTimestamp{file_path: PathBuf::from("/path/to/original"), time_stamp: None});
+        assert_eq!(tdh.post_pat, PathAndTimestamp{file_path: PathBuf::from("/path/to/new"), time_stamp: None});
     }
 }
