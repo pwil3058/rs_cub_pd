@@ -15,6 +15,7 @@
 extern crate regex;
 
 pub mod abstract_diff;
+pub mod unified_diff;
 pub mod lines;
 pub mod text_diff;
 
