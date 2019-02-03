@@ -23,13 +23,13 @@ use crate::lines::{Line, Lines};
 use crate::text_diff::*;
 
 pub struct UnifiedDiffChunk {
-    start_index: usize,
+    start_line_num: usize,
     length: usize,
 }
 
 impl UnifiedDiffChunk {
-    fn from_captures(captures: &Captures, index: usize, length: usize, line_number: usize) -> DiffParseResult<UnifiedDiffChunk> {
-        let start_index: usize = if let Some(m) = captures.get(index) {
+    fn from_captures(captures: &Captures, line_num: usize, length: usize, line_number: usize) -> DiffParseResult<UnifiedDiffChunk> {
+        let start_line_num: usize = if let Some(m) = captures.get(line_num) {
             usize::from_str(m.as_str()).map_err(|e| DiffParseError::ParseNumberError(e))?
         } else {
             return Err(DiffParseError::SyntaxError(DiffFormat::Unified, line_number))
@@ -39,7 +39,7 @@ impl UnifiedDiffChunk {
         } else {
             1
         };
-        Ok(UnifiedDiffChunk{start_index, length})
+        Ok(UnifiedDiffChunk{start_line_num, length})
     }
 }
 
@@ -92,11 +92,11 @@ impl TextDiffHunk for UnifiedDiffHunk {
         let ante_lines = self.ante_lines();
         let post_lines = self.post_lines();
         let ante_chunk = AbstractChunk{
-            start_index: if ante_lines.len() > 0 { self.ante_chunk.start_index - 1 } else { self.ante_chunk.start_index},
+            start_index: if ante_lines.len() > 0 { self.ante_chunk.start_line_num - 1 } else { self.ante_chunk.start_line_num},
             lines: ante_lines,
         };
         let post_chunk = AbstractChunk{
-            start_index: self.post_chunk.start_index - 1,
+            start_index: self.post_chunk.start_line_num - 1,
             lines: post_lines,
         };
         AbstractHunk::new(ante_chunk, post_chunk)
