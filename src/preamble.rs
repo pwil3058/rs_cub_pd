@@ -13,6 +13,7 @@
 //limitations under the License.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use regex::Regex;
 
@@ -21,9 +22,6 @@ use crate::lines::Lines;
 
 pub trait PreambleIfce {
     fn len(&self) -> usize;
-    fn ante_file_path(&self) -> String;
-    fn post_file_path(&self) -> String;
-    fn get_extra(&self, name: &str) -> Option<String>;
 }
 
 pub trait PreambleParser<P: PreambleIfce> {
@@ -38,25 +36,35 @@ pub struct GitPreamble {
     extras: HashMap<String, String>,
 }
 
-// TODO: change String return values to &str (learn about lives)
-impl PreambleIfce for GitPreamble {
-    fn len(&self) -> usize {
-        self.lines.len()
+// TODO: should we be returning Path or &Path instead of PathBuf
+impl GitPreamble {
+    pub fn ante_file_path_as_str(&self) -> &str {
+        self.ante_file_path.as_str()
     }
 
-    fn ante_file_path(&self) -> String {
-        self.ante_file_path.clone()
+    pub fn post_file_path_as_str(&self) -> &str {
+        self.post_file_path.as_str()
     }
 
-    fn post_file_path(&self) -> String {
-        self.post_file_path.clone()
+    pub fn ante_file_path_buf(&self) -> PathBuf {
+        self.ante_file_path.clone().into()
     }
 
-    fn get_extra(&self, name: &str) -> Option<String> {
+    pub fn post_file_path_buf(&self) -> PathBuf {
+        self.post_file_path.clone().into()
+    }
+
+    pub fn get_extra(&self, name: &str) -> Option<&str> {
         match self.extras.get(name) {
-            Some(extra) => Some(extra.to_string()),
+            Some(extra) => Some(extra),
             None => None
         }
+    }
+}
+
+impl PreambleIfce for GitPreamble{
+    fn len(&self) -> usize {
+        self.lines.len()
     }
 }
 
@@ -105,7 +113,7 @@ impl PreambleParser<GitPreamble> for GitPreambleParser {
         } else {
             captures.get(7).unwrap().as_str().to_string() // TODO: confirm unwrap is OK here
         };
-        
+
         let mut extras: HashMap<String, String> = HashMap::new();
         for index in start_index + 1..lines.len() {
             let mut found = false;
