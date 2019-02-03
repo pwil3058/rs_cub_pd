@@ -17,6 +17,7 @@ use std::path::PathBuf;
 
 use regex::Captures;
 
+use crate::abstract_diff::AbstractHunk;
 use crate::lines::*;
 use crate::DiffFormat;
 
@@ -45,29 +46,28 @@ pub struct TextDiffHeader {
     pub post_pat: PathAndTimestamp
 }
 
-pub trait TextDiffChunk {
-    fn start_index(&self) -> usize;
+pub trait TextDiffHunk {
+    fn len(&self) -> usize;
+
+    fn ante_lines(&self) -> Lines;
+    fn post_lines(&self) -> Lines;
+
+    fn get_abstract_diff_hunk(self) -> AbstractHunk;
 }
 
-pub struct TextDiffHunk<C: TextDiffChunk> {
-    pub lines: Lines,
-    pub ante_chunk: C,
-    pub post_chunk: C,
-}
-
-pub struct TextDiff<C: TextDiffChunk> {
+pub struct TextDiff<H: TextDiffHunk> {
     pub lines_consumed: usize, // time saver
     pub diff_format: DiffFormat,
     pub header: TextDiffHeader,
-    pub hunks: Vec<TextDiffHunk<C>>
+    pub hunks: Vec<H>
 }
 
-pub trait TextDiffParser<C: TextDiffChunk> {
+pub trait TextDiffParser<H: TextDiffHunk> {
     fn new() -> Self;
     fn diff_format(&self) -> DiffFormat;
     fn ante_file_rec<'t>(&self, line: &'t Line) -> Option<Captures<'t>>;
     fn post_file_rec<'t>(&self, line: &'t Line) -> Option<Captures<'t>>;
-    fn get_hunk_at(&self, lines: &Lines, index: usize) -> DiffParseResult<Option<TextDiffHunk<C>>>;
+    fn get_hunk_at(&self, lines: &Lines, index: usize) -> DiffParseResult<Option<H>>;
 
     fn _get_file_data_fm_captures(&self, captures: &Captures) -> PathAndTimestamp {
         let file_path = if let Some(path) = captures.get(2) {
@@ -99,7 +99,7 @@ pub trait TextDiffParser<C: TextDiffChunk> {
         Ok(Some(TextDiffHeader{lines, ante_pat, post_pat}))
     }
 
-    fn get_diff_at(&self, lines: &Lines, start_index: usize) -> DiffParseResult<Option<TextDiff<C>>> {
+    fn get_diff_at(&self, lines: &Lines, start_index: usize) -> DiffParseResult<Option<TextDiff<H>>> {
         if lines.len() - start_index < 2 {
             return Ok(None)
         }
@@ -110,16 +110,16 @@ pub trait TextDiffParser<C: TextDiffChunk> {
         } else {
             return Ok(None)
         };
-        let mut hunks: Vec<TextDiffHunk<C>> = Vec::new();
+        let mut hunks: Vec<H> = Vec::new();
         while index < lines.len() {
             if let Some(hunk) = self.get_hunk_at(&lines, index)? {
-                index += hunk.lines.len();
+                index += hunk.len();
                 hunks.push(hunk);
             } else {
                 break
             }
         }
-        let diff = TextDiff::<C> {
+        let diff = TextDiff::<H> {
             lines_consumed: index - start_index,
             diff_format: self.diff_format(),
             header,
@@ -143,9 +143,17 @@ mod tests {
         post_file_cre: Regex,
     }
 
-    impl TextDiffChunk for i32 {
-        fn start_index(&self) -> usize {
-            0
+    impl TextDiffHunk for i32 {
+        fn len(&self) -> usize {
+            1
+        }
+
+        fn ante_lines(&self) -> Lines {
+            vec![]
+        }
+
+        fn post_lines(&self) -> Lines {
+            vec![]
         }
     }
 
@@ -172,7 +180,7 @@ mod tests {
             self.post_file_cre.captures(line)
         }
 
-        fn get_hunk_at(&self, _lines: &Lines, _index: usize) -> DiffParseResult<Option<TextDiffHunk<i32>>> {
+        fn get_hunk_at(&self, _lines: &Lines, _index: usize) -> DiffParseResult<Option<i32>> {
             Ok(None)
         }
     }

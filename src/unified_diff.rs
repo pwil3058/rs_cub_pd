@@ -13,10 +13,12 @@
 // limitations under the License.
 
 use std::str::FromStr;
+use std::sync::Arc;
 
 use regex::{Captures, Regex};
 
 use crate::{DiffFormat, PATH_RE_STR, TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR};
+use crate::abstract_diff::{AbstractChunk, AbstractHunk};
 use crate::lines::{Line, Lines};
 use crate::text_diff::*;
 
@@ -41,9 +43,63 @@ impl UnifiedDiffChunk {
     }
 }
 
-impl TextDiffChunk for UnifiedDiffChunk {
-    fn start_index(&self) -> usize {
-        self.start_index
+pub struct UnifiedDiffHunk {
+    pub lines: Lines,
+    pub ante_chunk: UnifiedDiffChunk,
+    pub post_chunk: UnifiedDiffChunk,
+}
+
+impl UnifiedDiffHunk {
+    fn lines_not_starting_with(&self, bad_start: &str) -> Lines {
+        let mut lines: Lines = vec![];
+        for (index, ref line) in self.lines[1..].iter().enumerate() {
+            if line.starts_with(bad_start) || line.starts_with("\\") {
+                continue
+            }
+            if (index + 1) == self.lines.len() || !line.starts_with("\\") {
+                lines.push(Arc::new(line[1..].to_string()));
+            } else {
+                lines.push(Arc::new(line[1..].trim_right_matches("\n").to_string()));
+            }
+        }
+        lines
+    }
+}
+
+impl TextDiffHunk for UnifiedDiffHunk {
+    fn len(&self) -> usize {
+        self.lines.len()
+    }
+
+    fn ante_lines(&self) -> Lines {
+        self.lines_not_starting_with("+")
+    }
+
+    fn post_lines(&self) -> Lines {
+        self.lines_not_starting_with("-")
+    }
+
+    fn get_abstract_diff_hunk(self) -> AbstractHunk {
+        // NB: convert starting line numbers to 0 based indices
+        // <https://www.gnu.org/software/diffutils/manual/html_node/Detailed-Unified.html#Detailed-Unified>
+        // If a hunk contains just one line, only its start line number appears. Otherwise its line numbers
+        // look like ‘start,count’. An empty hunk is considered to start at the line that follows the hunk.
+        //
+        // If a hunk and its context contain two or more lines, its line numbers look like ‘start,count’.
+        // Otherwise only its end line number appears. An empty hunk is considered to end at the line that
+        // precedes the hunk.
+
+        let ante_lines = self.ante_lines();
+        let post_lines = self.post_lines();
+        let ante_chunk = AbstractChunk{
+            start_index: if ante_lines.len() > 0 { self.ante_chunk.start_index - 1 } else { self.ante_chunk.start_index},
+            lines: ante_lines,
+        };
+        let post_chunk = AbstractChunk{
+            start_index: self.post_chunk.start_index - 1,
+            lines: post_lines,
+        };
+        AbstractHunk::new(ante_chunk, post_chunk)
     }
 }
 
@@ -53,7 +109,7 @@ struct UnifiedDiffParser {
     hunk_data_cre: Regex,
 }
 
-impl TextDiffParser<UnifiedDiffChunk> for UnifiedDiffParser {
+impl TextDiffParser<UnifiedDiffHunk> for UnifiedDiffParser {
     fn new() -> Self {
         let e_ts_re_str = format!("({}|{})", TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR);
 
@@ -80,7 +136,7 @@ impl TextDiffParser<UnifiedDiffChunk> for UnifiedDiffParser {
         self.post_file_cre.captures(line)
     }
 
-    fn get_hunk_at(&self, lines: &Lines, start_index: usize) -> DiffParseResult<Option<TextDiffHunk<UnifiedDiffChunk>>> {
+    fn get_hunk_at(&self, lines: &Lines, start_index: usize) -> DiffParseResult<Option<UnifiedDiffHunk>> {
         let captures = if let Some(captures) = self.hunk_data_cre.captures(&lines[start_index]) {
             captures
         } else {
@@ -110,7 +166,7 @@ impl TextDiffParser<UnifiedDiffChunk> for UnifiedDiffParser {
         if index < lines.len() && lines[index].starts_with("\\") {
             index += 1
         }
-        let hunk = TextDiffHunk::<UnifiedDiffChunk> {
+        let hunk = UnifiedDiffHunk {
             lines: lines[start_index..index].to_vec(),
             ante_chunk,
             post_chunk

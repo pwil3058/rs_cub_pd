@@ -16,12 +16,13 @@ use std::fmt;
 use std::io;
 use std::path::Path;
 
+use crate::lines::{Line, Lines, first_inequality_fm_head, first_inequality_fm_tail};
 use crate::lines::*;
 use crate::ApplyOffset;
 
 pub struct AbstractChunk {
-    start_index: usize,
-    lines: Vec<Line>
+    pub start_index: usize,
+    pub lines: Vec<Line>
 }
 
 impl AbstractChunk {
@@ -44,6 +45,19 @@ pub struct AbstractHunk {
     chunk: [AbstractChunk; 2],
     ante_context_len: usize,
     post_context_len: usize
+}
+
+impl AbstractHunk {
+    pub fn new(ante_chunk: AbstractChunk, post_chunk: AbstractChunk) -> AbstractHunk {
+        // should be safe to unwrap() as the lines should be different
+        let ante_context_len = first_inequality_fm_head(&ante_chunk.lines, &post_chunk.lines).unwrap();
+        let post_context_len = first_inequality_fm_tail(&ante_chunk.lines, &post_chunk.lines).unwrap();
+        AbstractHunk {
+            chunk: [ante_chunk, post_chunk],
+            ante_context_len: ante_context_len,
+            post_context_len: post_context_len,
+        }
+    }
 }
 
 pub struct CompromisedPosnData {

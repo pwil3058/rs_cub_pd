@@ -56,7 +56,7 @@ pub trait LinesIfce {
         }
         Ok(lines)
     }
-    
+
     // Does we contain "sub_lines" starting at "index"?
     fn contains_sub_lines_at(&self, sub_lines: &[Line], index: usize) -> bool;
 
@@ -86,6 +86,34 @@ impl LinesIfce for Lines {
         None
     }
 }
+
+
+pub fn first_inequality_fm_head(lines1: &Lines, lines2: &Lines) -> Option<usize> {
+    if let Some(index) = lines1.iter().zip(lines2.iter()).position(|(a, b)| a != b) {
+        Some(index)
+    } else {
+        if lines1.len() == lines2.len() {
+            None
+        } else {
+            Some(lines1.len().min(lines2.len()))
+        }
+    }
+}
+
+pub fn first_inequality_fm_tail(lines1: &Lines, lines2: &Lines) -> Option<usize> {
+    if let Some(index) = lines1.iter().rev().zip(lines2.iter().rev()).position(|(a, b)| a != b) {
+        Some(index)
+    } else {
+        if lines1.len() > lines2.len() {
+            Some(lines1.len() - lines2.len())
+        } else if lines2.len() > lines1.len() {
+            Some(lines2.len() - lines1.len())
+        } else {
+            None
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
