@@ -136,6 +136,7 @@ mod tests {
     use regex::{Captures, Regex};
 
     use crate::{TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR, PATH_RE_STR};
+    use crate::abstract_diff::AbstractChunk;
 
     #[derive(Debug)]
     struct DummyDiffParser {
@@ -154,6 +155,12 @@ mod tests {
 
         fn post_lines(&self) -> Lines {
             vec![]
+        }
+        
+        fn get_abstract_diff_hunk(self) -> AbstractHunk {
+            let a1 = AbstractChunk{start_index: 1, lines: Vec::<Line>::new()};
+            let a2 = AbstractChunk{start_index: 1, lines: Vec::<Line>::new()};
+            AbstractHunk::new(a1, a2)
         }
     }
 

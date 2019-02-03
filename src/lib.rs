@@ -15,9 +15,10 @@
 extern crate regex;
 
 pub mod abstract_diff;
-pub mod unified_diff;
+pub mod preamble;
 pub mod lines;
 pub mod text_diff;
+pub mod unified_diff;
 
 pub const TIMESTAMP_RE_STR: &str = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{9})? [-+]{1}\d{4}";
 pub const ALT_TIMESTAMP_RE_STR: &str = r"[A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{2}:\d{2}:\d{2} \d{4} [-+]{1}\d{4}";
