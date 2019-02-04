@@ -57,6 +57,19 @@ pub trait LinesIfce {
         Ok(lines)
     }
 
+    fn from_string(string: &str) -> Lines {
+        let mut lines: Lines = vec![];
+        let mut start_index = 0;
+        for (end_index, _) in string.match_indices("\n") {
+            lines.push(Arc::new(string[start_index..end_index + 1].to_string()));
+            start_index = end_index + 1;
+        }
+        if start_index < string.len() {
+            lines.push(Arc::new(string[start_index..].to_string()));
+        }
+        lines
+    }
+
     // Does we contain "sub_lines" starting at "index"?
     fn contains_sub_lines_at(&self, sub_lines: &[Line], index: usize) -> bool;
 
@@ -87,7 +100,6 @@ impl LinesIfce for Lines {
     }
 }
 
-
 pub fn first_inequality_fm_head(lines1: &Lines, lines2: &Lines) -> Option<usize> {
     if let Some(index) = lines1.iter().zip(lines2.iter()).position(|(a, b)| a != b) {
         Some(index)
@@ -117,10 +129,23 @@ pub fn first_inequality_fm_tail(lines1: &Lines, lines2: &Lines) -> Option<usize>
 
 #[cfg(test)]
 mod tests {
-    //use super::*;
+    use super::*;
 
     #[test]
-    fn it_works() {
-
+    fn lines_from_strings_works() {
+        let test_string = " aaa\nbbb \nccc ddd\njjj";
+        let lines = Lines::from_string(test_string);
+        assert!(lines.len() == 4);
+        let lines = Lines::from_string(&test_string.to_string());
+        assert!(lines.len() == 4);
+        assert!(*lines[0] == " aaa\n");
+        assert!(*lines[3] == "jjj");
+        let test_string = " aaa\nbbb \nccc ddd\njjj\n";
+        let lines = Lines::from_string(test_string);
+        assert!(lines.len() == 4);
+        let lines = Lines::from_string(&test_string.to_string());
+        assert!(lines.len() == 4);
+        assert!(*lines[0] == " aaa\n");
+        assert!(*lines[3] == "jjj\n");
     }
 }
