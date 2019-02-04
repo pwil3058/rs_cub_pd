@@ -156,7 +156,7 @@ mod tests {
         fn post_lines(&self) -> Lines {
             vec![]
         }
-        
+
         fn get_abstract_diff_hunk(self) -> AbstractHunk {
             let a1 = AbstractChunk{start_index: 1, lines: Vec::<Line>::new()};
             let a2 = AbstractChunk{start_index: 1, lines: Vec::<Line>::new()};
@@ -167,10 +167,10 @@ mod tests {
     impl TextDiffParser<i32> for DummyDiffParser {
         fn new() -> Self {
             let e_ts_re_str = format!("({}|{})", TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR);
-            let e = format!(r"(?s)^--- ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
+            let e = format!(r"^--- ({})(\s+{})?(.*)(\n)?$", PATH_RE_STR, e_ts_re_str);
             let ante_file_cre = Regex::new(&e).unwrap();
             let e_ts_re_str = format!("({}|{})", TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR);
-            let e = format!(r"(?s)^\+\+\+ ({})(\s+{})?(.*)$", PATH_RE_STR, e_ts_re_str);
+            let e = format!(r"^\+\+\+ ({})(\s+{})?(.*)(\n)?$", PATH_RE_STR, e_ts_re_str);
             let post_file_cre = Regex::new(&e).unwrap();
             DummyDiffParser{ante_file_cre, post_file_cre}
         }
