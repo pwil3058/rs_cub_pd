@@ -196,6 +196,9 @@ mod tests {
 
         let result = parser.get_diff_at(&lines, 14);
         assert!(result.is_ok());
-        assert!(result.unwrap().is_some());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let mut diff = result.unwrap();
+        assert!(diff.iter().count() == diff.len());
     }
 }

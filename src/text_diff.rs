@@ -172,9 +172,17 @@ mod tests {
         post_file_cre: Regex,
     }
 
-    impl TextDiffHunk for i32 {
+    struct DummyDiffHunk {
+        lines: Lines
+    }
+
+    impl TextDiffHunk for DummyDiffHunk {
         fn len(&self) -> usize {
-            1
+            self.lines.len()
+        }
+
+        fn iter(&self) -> Iter<Line> {
+            self.lines.iter()
         }
 
         fn ante_lines(&self) -> Lines {
@@ -192,7 +200,7 @@ mod tests {
         }
     }
 
-    impl TextDiffParser<i32> for DummyDiffParser {
+    impl TextDiffParser<DummyDiffHunk> for DummyDiffParser {
         fn new() -> Self {
             let e_ts_re_str = format!("({}|{})", TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR);
             let e = format!(r"^--- ({})(\s+{})?(.*)(\n)?$", PATH_RE_STR, e_ts_re_str);
@@ -215,7 +223,7 @@ mod tests {
             self.post_file_cre.captures(line)
         }
 
-        fn get_hunk_at(&self, _lines: &Lines, _index: usize) -> DiffParseResult<Option<i32>> {
+        fn get_hunk_at(&self, _lines: &Lines, _index: usize) -> DiffParseResult<Option<DummyDiffHunk>> {
             Ok(None)
         }
     }
