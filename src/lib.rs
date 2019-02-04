@@ -17,6 +17,7 @@ extern crate regex;
 use std::slice::Iter;
 
 pub mod abstract_diff;
+pub mod diff_stats;
 pub mod preamble;
 pub mod lines;
 pub mod text_diff;
