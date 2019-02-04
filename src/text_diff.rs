@@ -14,12 +14,14 @@
 
 use std::num::ParseIntError;
 use std::path::PathBuf;
+use std::slice::Iter;
 
 use regex::Captures;
 
 use crate::abstract_diff::AbstractHunk;
 use crate::lines::*;
 use crate::DiffFormat;
+use crate::MultiListIter;
 
 // TODO: implement Error for DiffParseError
 #[derive(Debug)]
@@ -48,6 +50,7 @@ pub struct TextDiffHeader {
 
 pub trait TextDiffHunk {
     fn len(&self) -> usize;
+    fn iter(&self) -> Iter<Line>;
 
     fn ante_lines(&self) -> Lines;
     fn post_lines(&self) -> Lines;
@@ -56,10 +59,35 @@ pub trait TextDiffHunk {
 }
 
 pub struct TextDiff<H: TextDiffHunk> {
-    pub lines_consumed: usize, // time saver
-    pub diff_format: DiffFormat,
-    pub header: TextDiffHeader,
-    pub hunks: Vec<H>
+    lines_consumed: Option<usize>, // time saver
+    diff_format: DiffFormat,
+    header: TextDiffHeader,
+    hunks: Vec<H>
+}
+
+impl<H> TextDiff<H> where H: TextDiffHunk {
+    pub fn len(&mut self) -> usize {
+        if let Some(length) = self.lines_consumed {
+            length
+        } else {
+            let length = self.hunks.iter().fold(self.header.lines.len(), |n, h| n + h.len());
+            self.lines_consumed = Some(length);
+            length
+        }
+    }
+
+    pub fn iter(&self) -> MultiListIter<Line> {
+        let mut list = Vec::new();
+        list.push(self.header.lines.iter());
+        for hunk in self.hunks.iter() {
+            list.push(hunk.iter())
+        }
+        MultiListIter::<Line>::new(list)
+    }
+
+    pub fn diff_format(&self) -> DiffFormat {
+        self.diff_format
+    }
 }
 
 pub trait TextDiffParser<H: TextDiffHunk> {
@@ -120,7 +148,7 @@ pub trait TextDiffParser<H: TextDiffHunk> {
             }
         }
         let diff = TextDiff::<H> {
-            lines_consumed: index - start_index,
+            lines_consumed: None, //index - start_index,
             diff_format: self.diff_format(),
             header,
             hunks

@@ -14,6 +14,8 @@
 
 extern crate regex;
 
+use std::slice::Iter;
+
 pub mod abstract_diff;
 pub mod preamble;
 pub mod lines;
@@ -24,7 +26,7 @@ pub const TIMESTAMP_RE_STR: &str = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{9}
 pub const ALT_TIMESTAMP_RE_STR: &str = r"[A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{2}:\d{2}:\d{2} \d{4} [-+]{1}\d{4}";
 pub const PATH_RE_STR: &str = r###""([^"]+)"|(\S+)"###;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum DiffFormat {
     Unified,
     Context,
@@ -38,6 +40,37 @@ pub trait ApplyOffset {
 impl ApplyOffset for usize {
     fn apply_offset(self, offset: i64) -> usize {
         (self as i64 + offset) as usize
+    }
+}
+
+pub struct MultiListIter<'a, T> {
+    iters: Vec<Iter<'a, T>>,
+    current_iter: Box<Option<Iter<'a,T>>>
+}
+
+impl<'a, T> MultiListIter<'a, T> {
+    pub fn new(mut iters: Vec<Iter<'a, T>>) -> MultiListIter<T> {
+        iters.reverse();
+        let current_iter = Box::new(iters.pop());
+        MultiListIter{iters, current_iter}
+    }
+}
+
+impl<'a, T> Iterator for MultiListIter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(ref mut iter) = *self.current_iter {
+                if let Some(item) = iter.next() {
+                    return Some(item)
+                }
+            } else {
+                break;
+            };
+            self.current_iter = Box::new(self.iters.pop())
+        }
+        None
     }
 }
 

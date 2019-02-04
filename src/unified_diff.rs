@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::str::FromStr;
+use std::slice::Iter;
 use std::sync::Arc;
 
 use regex::{Captures, Regex};
@@ -69,6 +70,10 @@ impl UnifiedDiffHunk {
 impl TextDiffHunk for UnifiedDiffHunk {
     fn len(&self) -> usize {
         self.lines.len()
+    }
+
+    fn iter(&self) -> Iter<Line> {
+        self.lines.iter()
     }
 
     fn ante_lines(&self) -> Lines {
