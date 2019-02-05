@@ -12,6 +12,9 @@
 //See the License for the specific language governing permissions and
 //limitations under the License.
 
+/// This module implements an abstract text diff object which is easy to
+/// patch text lines. Hooks to facilitate conversion of unified and
+/// context to abstract diffs are included.
 use std::fmt;
 use std::io;
 use std::path::Path;
@@ -37,12 +40,12 @@ impl AbstractChunk {
     }
 }
 
-const BEFORE: usize = 0;
-const AFTER: usize = 1;
+const ANTE: usize = 0;
+const POST: usize = 1;
 const FUZZ_FACTOR: usize = 2;
 
 pub struct AbstractHunk {
-    chunk: [AbstractChunk; 2],
+    chunk: [AbstractChunk; 2], // using array to make reverse diff application easier
     ante_context_len: usize,
     post_context_len: usize
 }
@@ -57,6 +60,14 @@ impl AbstractHunk {
             ante_context_len: ante_context_len,
             post_context_len: post_context_len,
         }
+    }
+
+    pub fn ante_chunk(&self) -> &AbstractChunk {
+        &self.chunk[ANTE]
+    }
+
+    pub fn post_chunk(&self) -> &AbstractChunk {
+        &self.chunk[POST]
     }
 }
 
@@ -88,9 +99,9 @@ impl AbstractHunk {
             let ante_context_redn = context_redn.min(self.ante_context_len);
             let post_context_redn = context_redn.min(self.post_context_len);
             let fm = ante_context_redn;
-            let before = if reverse { AFTER } else { BEFORE };
-            let to = self.chunk[before].lines.len() - post_context_redn;
-            if let Some(start_index) = lines.find_first_sub_lines(&self.chunk[before].lines[fm..to], start_index) {
+            let ante = if reverse { POST } else { ANTE };
+            let to = self.chunk[ante].lines.len() - post_context_redn;
+            if let Some(start_index) = lines.find_first_sub_lines(&self.chunk[ante].lines[fm..to], start_index) {
                 return Some(CompromisedPosnData{start_index, ante_context_redn, post_context_redn})
             }
         };
@@ -99,31 +110,31 @@ impl AbstractHunk {
 
     // Calculate the applied position data for this hunk from provided data.
     fn get_applied_posn(&self, end_posn: usize, post_context_redn: usize, reverse: bool) -> AppliedPosnData {
-        let after = if reverse { BEFORE } else { AFTER };
-        let length = self.chunk[after].lines.len() - self.ante_context_len - self.post_context_len;
+        let post = if reverse { ANTE } else { POST };
+        let length = self.chunk[post].lines.len() - self.ante_context_len - self.post_context_len;
         let start_posn = end_posn - length - (self.post_context_len - post_context_redn) + 1;
         AppliedPosnData{start_posn, length}
     }
 
     fn is_already_applied(&self, lines: &Lines, offset: i64, reverse: bool) -> bool {
-        let (before, after) = if reverse { (AFTER, BEFORE) } else { (BEFORE, AFTER) };
-        let fr_offset = self.chunk[before].start_index as i64 - self.chunk[after].start_index as i64;
-        self.chunk[after].matches_lines(lines, fr_offset + offset)
+        let (ante, post) = if reverse { (POST, ANTE) } else { (ANTE, POST) };
+        let fr_offset = self.chunk[ante].start_index as i64 - self.chunk[post].start_index as i64;
+        self.chunk[post].matches_lines(lines, fr_offset + offset)
     }
 
     fn length_diff(&self, reverse: bool) -> i64 {
         if reverse {
-            self.chunk[BEFORE].lines.len() as i64 - self.chunk[AFTER].lines.len() as i64
+            self.chunk[ANTE].lines.len() as i64 - self.chunk[POST].lines.len() as i64
         } else {
-            self.chunk[AFTER].lines.len() as i64 - self.chunk[BEFORE].lines.len() as i64
+            self.chunk[POST].lines.len() as i64 - self.chunk[ANTE].lines.len() as i64
         }
     }
 
     fn len_minus_post_context(&self, reverse: bool) -> usize {
         if reverse {
-            self.chunk[BEFORE].lines.len() - self.post_context_len
+            self.chunk[ANTE].lines.len() - self.post_context_len
         } else {
-            self.chunk[AFTER].lines.len() - self.post_context_len
+            self.chunk[POST].lines.len() - self.post_context_len
         }
     }
 }
@@ -149,17 +160,17 @@ impl AbstractDiff {
         let mut result = ApplnResult::default();
         let mut current_offset: i64 = 0;
         let mut lines_index: usize = 0;
-        let (before, after) = if reverse { (AFTER, BEFORE) } else { (BEFORE, AFTER) };
+        let (ante, post) = if reverse { (POST, ANTE) } else { (ANTE, POST) };
         for (hunk_index, hunk) in self.hunks.iter().enumerate() {
-            if hunk.chunk[before].matches_lines(lines, current_offset) {
-                let index = hunk.chunk[before].start_index.apply_offset(current_offset);
+            if hunk.chunk[ante].matches_lines(lines, current_offset) {
+                let index = hunk.chunk[ante].start_index.apply_offset(current_offset);
                 for line in &lines[lines_index..index] {
                     result.lines.push(line.clone());
                 }
-                for line in &hunk.chunk[after].lines {
+                for line in &hunk.chunk[post].lines {
                     result.lines.push(line.clone());
                 }
-                lines_index = (hunk.chunk[before].start_index + hunk.chunk[before].lines.len()).apply_offset(current_offset);
+                lines_index = (hunk.chunk[ante].start_index + hunk.chunk[ante].lines.len()).apply_offset(current_offset);
                 result.successes += 1;
                 continue
             }
@@ -167,12 +178,12 @@ impl AbstractDiff {
                 for line in &lines[lines_index..cpd.start_index] {
                     result.lines.push(line.clone());
                 }
-                let end = &hunk.chunk[before].lines.len() - cpd.post_context_redn;
-                for line in &hunk.chunk[before].lines[cpd.ante_context_redn..end] {
+                let end = &hunk.chunk[ante].lines.len() - cpd.post_context_redn;
+                for line in &hunk.chunk[ante].lines[cpd.ante_context_redn..end] {
                     result.lines.push(line.clone());
                 }
-                lines_index = cpd.start_index + hunk.chunk[before].lines.len() - cpd.ante_context_redn - cpd.post_context_redn;
-                current_offset = cpd.start_index as i64 - hunk.chunk[before].start_index as i64 - cpd.ante_context_redn as i64;
+                lines_index = cpd.start_index + hunk.chunk[ante].lines.len() - cpd.ante_context_redn - cpd.post_context_redn;
+                current_offset = cpd.start_index as i64 - hunk.chunk[ante].start_index as i64 - cpd.ante_context_redn as i64;
                 let applied_posn = hunk.get_applied_posn(result.lines.len(), cpd.post_context_redn, reverse);
                 if let Some(file_path) = repd_file_path {
                     write!(err_w, "{:?}: Hunk #{} merged at {}.\n", file_path, hunk_index + 1, applied_posn).unwrap();
@@ -183,7 +194,7 @@ impl AbstractDiff {
                 continue
             }
             if hunk.is_already_applied(lines, current_offset, reverse) {
-                let new_lines_index = hunk.chunk[after].end_index().apply_offset(current_offset);
+                let new_lines_index = hunk.chunk[post].end_index().apply_offset(current_offset);
                 for line in &lines[lines_index..new_lines_index] {
                     result.lines.push(line.clone());
                 }
@@ -198,8 +209,8 @@ impl AbstractDiff {
                 result.already_applied += 1;
                 continue
             }
-            let before_hlen = hunk.chunk[before].lines.len() - hunk.post_context_len;
-            if (hunk.chunk[before].start_index + before_hlen).apply_offset(current_offset) > lines.len() {
+            let ante_hlen = hunk.chunk[ante].lines.len() - hunk.post_context_len;
+            if (hunk.chunk[ante].start_index + ante_hlen).apply_offset(current_offset) > lines.len() {
                 // We've run out of lines to patch
                 if let Some(file_path) = repd_file_path {
                     write!(err_w, "{:?}: Unexpected end of file: ", file_path).unwrap();
@@ -215,19 +226,19 @@ impl AbstractDiff {
                 result.failures += remaining_hunks as u64;
                 break
             }
-            let end_index = hunk.chunk[before].start_index.apply_offset(current_offset);
+            let end_index = hunk.chunk[ante].start_index.apply_offset(current_offset);
             for line in &lines[lines_index..end_index] {
                 result.lines.push(line.clone())
             }
             lines_index = end_index;
             result.lines.push(Line::conflict_start_marker());
             let start_line = result.lines.len();
-            for line in &lines[lines_index..lines_index + before_hlen] {
+            for line in &lines[lines_index..lines_index + ante_hlen] {
                 result.lines.push(line.clone())
             }
-            lines_index += before_hlen;
+            lines_index += ante_hlen;
             result.lines.push(Line::conflict_separation_marker());
-            for line in &hunk.chunk[after].lines[..hunk.len_minus_post_context(reverse)] {
+            for line in &hunk.chunk[post].lines[..hunk.len_minus_post_context(reverse)] {
                 result.lines.push(line.clone())
             }
             result.lines.push(Line::conflict_end_marker());

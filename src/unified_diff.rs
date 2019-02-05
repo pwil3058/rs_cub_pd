@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::convert::From;
 use std::str::FromStr;
 use std::slice::Iter;
 use std::sync::Arc;
 
+use lcs::{DiffComponent, LcsTable};
 use regex::{Captures, Regex};
 
 use crate::{DiffFormat, PATH_RE_STR, TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR};
@@ -23,9 +25,20 @@ use crate::abstract_diff::{AbstractChunk, AbstractHunk};
 use crate::lines::{Line, Lines};
 use crate::text_diff::*;
 
+#[derive(Debug, Clone, Copy)]
 pub struct UnifiedDiffChunk {
     start_line_num: usize,
     length: usize,
+}
+
+impl From<&AbstractChunk> for UnifiedDiffChunk {
+    fn from(abstract_chunk: &AbstractChunk) -> Self {
+        UnifiedDiffChunk {
+            start_line_num: abstract_chunk.start_index + 1,
+            length: abstract_chunk.lines.len()
+        }
+
+    }
 }
 
 impl UnifiedDiffChunk {
@@ -105,6 +118,81 @@ impl TextDiffHunk for UnifiedDiffHunk {
             lines: post_lines,
         };
         AbstractHunk::new(ante_chunk, post_chunk)
+    }
+}
+
+//@@ -l,s +l,s @@ optional section heading
+//
+//The hunk range information contains two hunk ranges. The range for
+//the hunk of the original file is preceded by a minus symbol, and
+//the range for the new file is preceded by a plus symbol. Each hunk
+//range is of the format l,s where l is the starting line number and
+//s is the number of lines the change hunk applies to for each
+//respective file. In many versions of GNU diff, each range can omit
+//the comma and trailing value s, in which case s defaults to 1.
+//Note that the only really interesting value is the l line number of
+//the first range; all the other values can be computed from the diff.
+//
+//The hunk range for the original should be the sum of all contextual
+//and deletion (including changed) hunk lines. The hunk range for
+//the new file should be a sum of all contextual and addition
+//(including changed) hunk lines. If hunk size information does not
+//correspond with the number of lines in the hunk, then the diff
+//could be considered invalid and be rejected.
+
+//Optionally, the hunk range can be followed by the heading of the
+//section or function that the hunk is part of. This is mainly useful
+//to make the diff easier to read.
+// TODO: check whether Gnu version is necessary for "patch" to work
+fn hunk_header_line(ante_chunk: &UnifiedDiffChunk, post_chunk: &UnifiedDiffChunk, extra_text: Option<&str>) -> Line {
+    let string = if let Some(extra_text) = extra_text {
+        format!("@@ -{},{} +{},{} @@ {}\n",
+            ante_chunk.start_line_num,
+            ante_chunk.length,
+            post_chunk.start_line_num,
+            post_chunk.length,
+            extra_text,
+        )
+    } else {
+        format!("@@ -{},{} +{},{} @@\n",
+            ante_chunk.start_line_num,
+            ante_chunk.length,
+            post_chunk.start_line_num,
+            post_chunk.length,
+        )
+    };
+    Line::new(string)
+}
+
+// TODO: add "extra string" to abstract text content
+impl From<&AbstractHunk> for UnifiedDiffHunk {
+    fn from(abstract_hunk: &AbstractHunk) -> Self {
+        let abs_ante_chunk = abstract_hunk.ante_chunk();
+        let ante_chunk = abs_ante_chunk.into();
+        let abs_post_chunk = abstract_hunk.post_chunk();
+        let post_chunk = abs_post_chunk.into();
+
+        let mut lines = Vec::new();
+        lines.push(hunk_header_line(&ante_chunk, &post_chunk, None));
+        let lcs_table = LcsTable::new(&abs_ante_chunk.lines, &abs_post_chunk.lines);
+        for diff_component in lcs_table.diff() {
+            match diff_component {
+                DiffComponent::Insertion(line) => {
+                    lines.push(Line::new(format!("+{}", line)))
+                },
+                DiffComponent::Unchanged(line, _) => {
+                    lines.push(Line::new(format!(" {}", line)))
+                },
+                DiffComponent::Deletion(line) => {
+                    lines.push(Line::new(format!("-{}", line)))
+                },
+            }
+        }
+        UnifiedDiffHunk {
+            lines: lines,
+            ante_chunk: ante_chunk,
+            post_chunk: post_chunk,
+        }
     }
 }
 

@@ -5,4 +5,5 @@ authors = ["Peter Williams <pwil3058@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+lcs = "0.2.0"
 regex = "1"
