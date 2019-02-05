@@ -27,7 +27,7 @@ use crate::MultiListIter;
 #[derive(Debug)]
 pub enum DiffParseError {
     MissingAfterFileData(usize),
-    ParseNumberError(ParseIntError),
+    ParseNumberError(ParseIntError, usize),
     UnexpectedEndOfInput,
     UnexpectedEndHunk(DiffFormat, usize),
     SyntaxError(DiffFormat, usize),

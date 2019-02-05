@@ -44,12 +44,12 @@ impl From<&AbstractChunk> for UnifiedDiffChunk {
 impl UnifiedDiffChunk {
     fn from_captures(captures: &Captures, line_num: usize, length: usize, line_number: usize) -> DiffParseResult<UnifiedDiffChunk> {
         let start_line_num: usize = if let Some(m) = captures.get(line_num) {
-            usize::from_str(m.as_str()).map_err(|e| DiffParseError::ParseNumberError(e))?
+            usize::from_str(m.as_str()).map_err(|e| DiffParseError::ParseNumberError(e, line_number))?
         } else {
             return Err(DiffParseError::SyntaxError(DiffFormat::Unified, line_number))
         };
         let length: usize = if let Some(m) = captures.get(length) {
-            usize::from_str(m.as_str()).map_err(|e| DiffParseError::ParseNumberError(e))?
+            usize::from_str(m.as_str()).map_err(|e| DiffParseError::ParseNumberError(e, line_number))?
         } else {
             1
         };
