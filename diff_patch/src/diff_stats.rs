@@ -15,6 +15,8 @@
 use std::fmt::{self, Display, Formatter};
 use std::slice::Iter;
 
+use regex::Regex;
+
 use crate::lines::{Line, Lines};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -67,6 +69,63 @@ impl DiffStatsLines {
 
     pub fn stats(&self) -> &DiffStats {
         &self.stats
+    }
+}
+
+pub struct DiffStatParser {
+    empty_cre: Regex,
+    end_cre: Regex,
+    file_stats_cre: Regex,
+    blank_line_cre: Regex,
+    divider_line_cre: Regex,
+}
+
+impl DiffStatParser {
+    pub fn new() -> Self {
+        let end_cre_str = format!(
+            "{}{}{}{}",
+            r"^#? (\d+) files? changed",
+            r"(, (\d+) insertions?\(\+\))?",
+            r"(, (\d+) deletions?\(-\))?",
+            r"(, (\d+) modifications?\(\!\))?(\n)?$",
+        );
+        DiffStatParser {
+            empty_cre: Regex::new(r"^#? 0 files changed(\n)?$").unwrap(),
+            end_cre: Regex::new(&end_cre_str).unwrap(),
+            file_stats_cre: Regex::new(r"^#? (\S+)\s*\|((binary)|(\s*(\d+)(\s+\+*-*\!*)?))(\n)$")
+                .unwrap(),
+            blank_line_cre: Regex::new(r"^\s*(\n)$").unwrap(),
+            divider_line_cre: Regex::new(r"^---(\n)$").unwrap(),
+        }
+    }
+
+    pub fn get_summary_line_range_at(
+        &self,
+        lines: &[Line],
+        start_index: usize,
+    ) -> Option<(usize, usize)> {
+        let mut index = start_index;
+
+        if self.divider_line_cre.is_match(&lines[index]) {
+            index += 1;
+        }
+        while index < lines.len() && self.blank_line_cre.is_match(&lines[index]) {
+            index += 1;
+        }
+        if index >= lines.len() {
+            return None;
+        }
+        if self.empty_cre.is_match(&lines[index]) {
+            return Some((start_index, index));
+        }
+        while index < lines.len() && self.file_stats_cre.is_match(&lines[index]) {
+            index += 1;
+        }
+        if index < lines.len() && self.end_cre.is_match(&lines[index]) {
+            return Some((start_index, index));
+        }
+        // TODO: worry about malformed summary
+        None
     }
 }
 

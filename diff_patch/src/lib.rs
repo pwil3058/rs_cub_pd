@@ -21,6 +21,7 @@ pub mod abstract_diff;
 pub mod context_diff;
 pub mod diff_stats;
 pub mod lines;
+pub mod patch;
 pub mod preamble;
 pub mod text_diff;
 pub mod unified_diff;
