@@ -1,11 +1,11 @@
 //Copyright 2019 Peter Williams <pwil3058@gmail.com> <pwil3058@bigpond.net.au>
-
+//
 //Licensed under the Apache License, Version 2.0 (the "License");
 //you may not use this file except in compliance with the License.
 //You may obtain a copy of the License at
-
-    //http://www.apache.org/licenses/LICENSE-2.0
-
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
 //Unless required by applicable law or agreed to in writing, software
 //distributed under the License is distributed on an "AS IS" BASIS,
 //WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,8 +18,8 @@ use std::slice::Iter;
 
 use regex::Regex;
 
-use crate::PATH_RE_STR;
 use crate::lines::{Line, Lines};
+use crate::PATH_RE_STR;
 
 pub trait PreambleIfce {
     fn len(&self) -> usize;
@@ -63,19 +63,19 @@ impl GitPreamble {
     pub fn get_extra(&self, name: &str) -> Option<&str> {
         match self.extras.get(name) {
             Some(extra) => Some(&extra.0),
-            None => None
+            None => None,
         }
     }
 
     pub fn get_extra_line_index(&self, name: &str) -> Option<usize> {
         match self.extras.get(name) {
             Some(extra) => Some(extra.1),
-            None => None
+            None => None,
         }
     }
 }
 
-impl PreambleIfce for GitPreamble{
+impl PreambleIfce for GitPreamble {
     fn len(&self) -> usize {
         self.lines.len()
     }
@@ -92,7 +92,10 @@ pub struct GitPreambleParser {
 
 impl PreambleParser<GitPreamble> for GitPreambleParser {
     fn new() -> GitPreambleParser {
-        let diff_cre_str = format!(r"^diff\s+--git\s+({})\s+({})(\n)?$", PATH_RE_STR, PATH_RE_STR);
+        let diff_cre_str = format!(
+            r"^diff\s+--git\s+({})\s+({})(\n)?$",
+            PATH_RE_STR, PATH_RE_STR
+        );
         let diff_cre = Regex::new(&diff_cre_str).unwrap();
 
         let extras_cres = [
@@ -107,18 +110,22 @@ impl PreambleParser<GitPreamble> for GitPreambleParser {
             &format!(r"^(copy to)\s+({0})(\n)?$", PATH_RE_STR),
             &format!(r"^(rename from)\s+({0})(\n)?$", PATH_RE_STR),
             &format!(r"^(rename to)\s+({0})(\n)?$", PATH_RE_STR),
-        ].iter()
-            .map(|cre_str| Regex::new(cre_str).unwrap())
-            .collect();
+        ]
+        .iter()
+        .map(|cre_str| Regex::new(cre_str).unwrap())
+        .collect();
 
-        GitPreambleParser{diff_cre, extras_cres}
+        GitPreambleParser {
+            diff_cre,
+            extras_cres,
+        }
     }
 
     fn get_preamble_at(&self, lines: &Lines, start_index: usize) -> Option<GitPreamble> {
         let captures = if let Some(captures) = self.diff_cre.captures(&lines[start_index]) {
             captures
         } else {
-            return None
+            return None;
         };
         let ante_file_path = if let Some(path) = captures.get(3) {
             path.as_str().to_string()
@@ -138,21 +145,24 @@ impl PreambleParser<GitPreamble> for GitPreambleParser {
                 if let Some(captures) = cre.captures(&lines[index]) {
                     extras.insert(
                         captures.get(1).unwrap().as_str().to_string(),
-                        (captures.get(2).unwrap().as_str().to_string(), index - start_index)
+                        (
+                            captures.get(2).unwrap().as_str().to_string(),
+                            index - start_index,
+                        ),
                     );
                     found = true;
-                    break
+                    break;
                 };
             }
             if !found {
-                break
+                break;
             }
         }
-        Some(GitPreamble{
+        Some(GitPreamble {
             lines: lines[start_index..start_index + extras.len() + 1].to_vec(),
             ante_file_path,
             post_file_path,
-            extras
+            extras,
         })
     }
 }
@@ -168,7 +178,7 @@ mod tests {
         for s in &[
             "diff --git a/src/preamble.rs b/src/preamble.rs\n",
             "new file mode 100644\n",
-            "index 0000000..0503e55\n"
+            "index 0000000..0503e55\n",
         ] {
             lines.push(Arc::new(s.to_string()))
         }

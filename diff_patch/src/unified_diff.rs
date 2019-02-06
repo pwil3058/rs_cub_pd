@@ -13,16 +13,16 @@
 // limitations under the License.
 
 use std::convert::From;
-use std::str::FromStr;
 use std::slice::Iter;
+use std::str::FromStr;
 
 use lcs::{DiffComponent, LcsTable};
 use regex::{Captures, Regex};
 
-use crate::{DiffFormat, PATH_RE_STR, TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR};
 use crate::abstract_diff::{AbstractChunk, AbstractHunk};
 use crate::lines::{Line, Lines};
 use crate::text_diff::*;
+use crate::{DiffFormat, ALT_TIMESTAMP_RE_STR, PATH_RE_STR, TIMESTAMP_RE_STR};
 
 #[derive(Debug, Clone, Copy)]
 pub struct UnifiedDiffChunk {
@@ -34,25 +34,37 @@ impl From<&AbstractChunk> for UnifiedDiffChunk {
     fn from(abstract_chunk: &AbstractChunk) -> Self {
         UnifiedDiffChunk {
             start_line_num: abstract_chunk.start_index + 1,
-            length: abstract_chunk.lines.len()
+            length: abstract_chunk.lines.len(),
         }
-
     }
 }
 
 impl UnifiedDiffChunk {
-    fn from_captures(captures: &Captures, line_num: usize, length: usize, line_number: usize) -> DiffParseResult<UnifiedDiffChunk> {
+    fn from_captures(
+        captures: &Captures,
+        line_num: usize,
+        length: usize,
+        line_number: usize,
+    ) -> DiffParseResult<UnifiedDiffChunk> {
         let start_line_num: usize = if let Some(m) = captures.get(line_num) {
-            usize::from_str(m.as_str()).map_err(|e| DiffParseError::ParseNumberError(e, line_number))?
+            usize::from_str(m.as_str())
+                .map_err(|e| DiffParseError::ParseNumberError(e, line_number))?
         } else {
-            return Err(DiffParseError::SyntaxError(DiffFormat::Unified, line_number))
+            return Err(DiffParseError::SyntaxError(
+                DiffFormat::Unified,
+                line_number,
+            ));
         };
         let length: usize = if let Some(m) = captures.get(length) {
-            usize::from_str(m.as_str()).map_err(|e| DiffParseError::ParseNumberError(e, line_number))?
+            usize::from_str(m.as_str())
+                .map_err(|e| DiffParseError::ParseNumberError(e, line_number))?
         } else {
             1
         };
-        Ok(UnifiedDiffChunk{start_line_num, length})
+        Ok(UnifiedDiffChunk {
+            start_line_num,
+            length,
+        })
     }
 }
 
@@ -91,11 +103,15 @@ impl TextDiffHunk for UnifiedDiffHunk {
 
         let ante_lines = self.ante_lines();
         let post_lines = self.post_lines();
-        let ante_chunk = AbstractChunk{
-            start_index: if ante_lines.len() > 0 { self.ante_chunk.start_line_num - 1 } else { self.ante_chunk.start_line_num},
+        let ante_chunk = AbstractChunk {
+            start_index: if ante_lines.len() > 0 {
+                self.ante_chunk.start_line_num - 1
+            } else {
+                self.ante_chunk.start_line_num
+            },
             lines: ante_lines,
         };
-        let post_chunk = AbstractChunk{
+        let post_chunk = AbstractChunk {
             start_index: self.post_chunk.start_line_num - 1,
             lines: post_lines,
         };
@@ -126,9 +142,14 @@ impl TextDiffHunk for UnifiedDiffHunk {
 //section or function that the hunk is part of. This is mainly useful
 //to make the diff easier to read.
 // TODO: check whether Gnu version is necessary for "patch" to work
-fn hunk_header_line(ante_chunk: &UnifiedDiffChunk, post_chunk: &UnifiedDiffChunk, extra_text: Option<&str>) -> Line {
+fn hunk_header_line(
+    ante_chunk: &UnifiedDiffChunk,
+    post_chunk: &UnifiedDiffChunk,
+    extra_text: Option<&str>,
+) -> Line {
     let string = if let Some(extra_text) = extra_text {
-        format!("@@ -{},{} +{},{} @@ {}\n",
+        format!(
+            "@@ -{},{} +{},{} @@ {}\n",
             ante_chunk.start_line_num,
             ante_chunk.length,
             post_chunk.start_line_num,
@@ -136,7 +157,8 @@ fn hunk_header_line(ante_chunk: &UnifiedDiffChunk, post_chunk: &UnifiedDiffChunk
             extra_text,
         )
     } else {
-        format!("@@ -{},{} +{},{} @@\n",
+        format!(
+            "@@ -{},{} +{},{} @@\n",
             ante_chunk.start_line_num,
             ante_chunk.length,
             post_chunk.start_line_num,
@@ -159,15 +181,9 @@ impl From<&AbstractHunk> for UnifiedDiffHunk {
         let lcs_table = LcsTable::new(&abs_ante_chunk.lines, &abs_post_chunk.lines);
         for diff_component in lcs_table.diff() {
             match diff_component {
-                DiffComponent::Insertion(line) => {
-                    lines.push(Line::new(format!("+{}", line)))
-                },
-                DiffComponent::Unchanged(line, _) => {
-                    lines.push(Line::new(format!(" {}", line)))
-                },
-                DiffComponent::Deletion(line) => {
-                    lines.push(Line::new(format!("-{}", line)))
-                },
+                DiffComponent::Insertion(line) => lines.push(Line::new(format!("+{}", line))),
+                DiffComponent::Unchanged(line, _) => lines.push(Line::new(format!(" {}", line))),
+                DiffComponent::Deletion(line) => lines.push(Line::new(format!("-{}", line))),
             }
         }
         UnifiedDiffHunk {
@@ -194,9 +210,14 @@ impl TextDiffParser<UnifiedDiffHunk> for UnifiedDiffParser {
         let e = format!(r"^\+\+\+ ({})(\s+{})?(.*)(\n)?$", PATH_RE_STR, e_ts_re_str);
         let post_file_cre = Regex::new(&e).unwrap();
 
-        let hunk_data_cre = Regex::new(r"^@@\s+-(\d+)(,(\d+))?\s+\+(\d+)(,(\d+))?\s+@@\s*(.*)(\n)?$").unwrap();
+        let hunk_data_cre =
+            Regex::new(r"^@@\s+-(\d+)(,(\d+))?\s+\+(\d+)(,(\d+))?\s+@@\s*(.*)(\n)?$").unwrap();
 
-        UnifiedDiffParser{ante_file_cre, post_file_cre, hunk_data_cre}
+        UnifiedDiffParser {
+            ante_file_cre,
+            post_file_cre,
+            hunk_data_cre,
+        }
     }
 
     fn diff_format(&self) -> DiffFormat {
@@ -211,11 +232,15 @@ impl TextDiffParser<UnifiedDiffHunk> for UnifiedDiffParser {
         self.post_file_cre.captures(line)
     }
 
-    fn get_hunk_at(&self, lines: &Lines, start_index: usize) -> DiffParseResult<Option<UnifiedDiffHunk>> {
+    fn get_hunk_at(
+        &self,
+        lines: &Lines,
+        start_index: usize,
+    ) -> DiffParseResult<Option<UnifiedDiffHunk>> {
         let captures = if let Some(captures) = self.hunk_data_cre.captures(&lines[start_index]) {
             captures
         } else {
-            return Ok(None)
+            return Ok(None);
         };
         let ante_chunk = UnifiedDiffChunk::from_captures(&captures, 1, 3, start_index)?;
         let post_chunk = UnifiedDiffChunk::from_captures(&captures, 4, 6, start_index)?;
@@ -224,7 +249,7 @@ impl TextDiffParser<UnifiedDiffHunk> for UnifiedDiffParser {
         let mut post_count = 0;
         while ante_count < ante_chunk.length || post_count < post_chunk.length {
             if index >= lines.len() {
-                return Err(DiffParseError::UnexpectedEndOfInput)
+                return Err(DiffParseError::UnexpectedEndOfInput);
             }
             if lines[index].starts_with("-") {
                 ante_count += 1
@@ -234,17 +259,20 @@ impl TextDiffParser<UnifiedDiffHunk> for UnifiedDiffParser {
                 ante_count += 1;
                 post_count += 1
             } else if !lines[index].starts_with("\\") {
-                return Err(DiffParseError::UnexpectedEndHunk(DiffFormat::Unified, index))
+                return Err(DiffParseError::UnexpectedEndHunk(
+                    DiffFormat::Unified,
+                    index,
+                ));
             }
             index += 1
-        };
+        }
         if index < lines.len() && lines[index].starts_with("\\") {
             index += 1
         }
         let hunk = UnifiedDiffHunk {
             lines: lines[start_index..index].to_vec(),
             ante_chunk,
-            post_chunk
+            post_chunk,
         };
         Ok(Some(hunk))
     }
@@ -253,8 +281,8 @@ impl TextDiffParser<UnifiedDiffHunk> for UnifiedDiffParser {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
     use crate::lines::{Lines, LinesIfce};
+    use std::path::Path;
 
     #[test]
     fn get_hunk_at_works() {

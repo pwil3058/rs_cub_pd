@@ -1,26 +1,28 @@
 //Copyright 2019 Peter Williams <pwil3058@gmail.com> <pwil3058@bigpond.net.au>
-
+//
 //Licensed under the Apache License, Version 2.0 (the "License");
 //you may not use this file except in compliance with the License.
 //You may obtain a copy of the License at
-
-    //http://www.apache.org/licenses/LICENSE-2.0
-
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
 //Unless required by applicable law or agreed to in writing, software
 //distributed under the License is distributed on an "AS IS" BASIS,
 //WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //See the License for the specific language governing permissions and
 //limitations under the License.
 
-use std::str::FromStr;
 use std::slice::Iter;
+use std::str::FromStr;
 
 use regex::{Captures, Regex};
 
-use crate::{DiffFormat, PATH_RE_STR, TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR};
 use crate::abstract_diff::{AbstractChunk, AbstractHunk};
 use crate::lines::{Line, Lines};
-use crate::text_diff::{DiffParseError, DiffParseResult, TextDiffHunk, TextDiffParser, extract_source_lines};
+use crate::text_diff::{
+    extract_source_lines, DiffParseError, DiffParseResult, TextDiffHunk, TextDiffParser,
+};
+use crate::{DiffFormat, ALT_TIMESTAMP_RE_STR, PATH_RE_STR, TIMESTAMP_RE_STR};
 
 pub struct ContextDiffChunk {
     offset: usize,
@@ -64,11 +66,11 @@ impl TextDiffHunk for ContextDiffHunk {
 
     fn get_abstract_diff_hunk(&self) -> AbstractHunk {
         // NB: convert starting line numbers to 0 based indices
-        let ante_chunk = AbstractChunk{
+        let ante_chunk = AbstractChunk {
             start_index: self.ante_chunk.start_line_num - 1,
             lines: self.ante_lines(),
         };
-        let post_chunk = AbstractChunk{
+        let post_chunk = AbstractChunk {
             start_index: self.post_chunk.start_line_num - 1,
             lines: self.post_lines(),
         };
@@ -85,14 +87,22 @@ struct ContextDiffParser {
 }
 
 impl ContextDiffParser {
-    fn start_and_length_from_captures(captures: Captures, line_number: usize) -> DiffParseResult<(usize, usize)> {
+    fn start_and_length_from_captures(
+        captures: Captures,
+        line_number: usize,
+    ) -> DiffParseResult<(usize, usize)> {
         let start: usize = if let Some(capture) = captures.get(1) {
-            usize::from_str(capture.as_str()).map_err(|e| DiffParseError::ParseNumberError(e, line_number))?
+            usize::from_str(capture.as_str())
+                .map_err(|e| DiffParseError::ParseNumberError(e, line_number))?
         } else {
-            return Err(DiffParseError::SyntaxError(DiffFormat::Context, line_number))
+            return Err(DiffParseError::SyntaxError(
+                DiffFormat::Context,
+                line_number,
+            ));
         };
         let finish: usize = if let Some(capture) = captures.get(3) {
-            usize::from_str(capture.as_str()).map_err(|e| DiffParseError::ParseNumberError(e, line_number))?
+            usize::from_str(capture.as_str())
+                .map_err(|e| DiffParseError::ParseNumberError(e, line_number))?
         } else {
             start
         };
@@ -105,15 +115,26 @@ impl ContextDiffParser {
         Ok((start, length))
     }
 
-    fn get_ante_sal_at(&self, lines: &Lines, start_index: usize) -> DiffParseResult<(usize, usize)> {
+    fn get_ante_sal_at(
+        &self,
+        lines: &Lines,
+        start_index: usize,
+    ) -> DiffParseResult<(usize, usize)> {
         if let Some(captures) = self.hunk_ante_cre.captures(&lines[start_index]) {
             Self::start_and_length_from_captures(captures, start_index + 1)
         } else {
-            Err(DiffParseError::SyntaxError(DiffFormat::Context, start_index + 1))
+            Err(DiffParseError::SyntaxError(
+                DiffFormat::Context,
+                start_index + 1,
+            ))
         }
     }
 
-    fn get_post_sal_at(&self, lines: &Lines, start_index: usize) -> DiffParseResult<Option<(usize, usize)>> {
+    fn get_post_sal_at(
+        &self,
+        lines: &Lines,
+        start_index: usize,
+    ) -> DiffParseResult<Option<(usize, usize)>> {
         if let Some(captures) = self.hunk_post_cre.captures(&lines[start_index]) {
             let sal = Self::start_and_length_from_captures(captures, start_index + 1)?;
             Ok(Some(sal))
@@ -150,9 +171,13 @@ impl TextDiffParser<ContextDiffHunk> for ContextDiffParser {
         self.post_file_cre.captures(line)
     }
 
-    fn get_hunk_at(&self, lines: &Lines, start_index: usize) -> DiffParseResult<Option<ContextDiffHunk>> {
+    fn get_hunk_at(
+        &self,
+        lines: &Lines,
+        start_index: usize,
+    ) -> DiffParseResult<Option<ContextDiffHunk>> {
         if !self.hunk_start_cre.is_match(&lines[start_index]) {
-            return Ok(None)
+            return Ok(None);
         }
         let ante_start_index = start_index + 1;
         let ante_sal = self.get_ante_sal_at(lines, ante_start_index)?;
@@ -161,11 +186,11 @@ impl TextDiffParser<ContextDiffHunk> for ContextDiffParser {
         let mut post_count = 0;
         let mut o_post_sal: Option<(usize, usize)> = None;
         let mut post_start_index = index;
-        while ante_count < ante_sal.1  {
+        while ante_count < ante_sal.1 {
             post_start_index = index;
-            o_post_sal = self.get_post_sal_at(lines,index)?;
+            o_post_sal = self.get_post_sal_at(lines, index)?;
             if o_post_sal.is_some() {
-                break
+                break;
             }
             ante_count += 1;
             index += 1;
@@ -175,18 +200,21 @@ impl TextDiffParser<ContextDiffHunk> for ContextDiffParser {
                 index += 1;
             }
             post_start_index = index;
-            o_post_sal = self.get_post_sal_at(lines,index)?;
+            o_post_sal = self.get_post_sal_at(lines, index)?;
             if o_post_sal.is_none() {
-                return Err(DiffParseError::SyntaxError(DiffFormat::Context, index + 1))
+                return Err(DiffParseError::SyntaxError(DiffFormat::Context, index + 1));
             }
         }
         let post_sal = o_post_sal.unwrap();
         while post_count < post_sal.1 {
-            if !(lines[index].starts_with("! ") || lines[index].starts_with("+ ") || lines[index].starts_with(" ")) {
+            if !(lines[index].starts_with("! ")
+                || lines[index].starts_with("+ ")
+                || lines[index].starts_with(" "))
+            {
                 if post_count == 0 {
-                    break
+                    break;
                 }
-                return Err(DiffParseError::SyntaxError(DiffFormat::Context, index + 1))
+                return Err(DiffParseError::SyntaxError(DiffFormat::Context, index + 1));
             }
             post_count += 1;
             index += 1;
@@ -206,7 +234,7 @@ impl TextDiffParser<ContextDiffHunk> for ContextDiffParser {
             _length: post_sal.1,
             numlines: index - post_start_index,
         };
-        let hunk = ContextDiffHunk{
+        let hunk = ContextDiffHunk {
             lines: lines[start_index..index].to_vec(),
             ante_chunk,
             post_chunk,

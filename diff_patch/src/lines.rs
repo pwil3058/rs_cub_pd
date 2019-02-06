@@ -49,7 +49,7 @@ pub trait LinesIfce {
         loop {
             let mut line = String::new();
             if reader.read_line(&mut line)? == 0 {
-                break
+                break;
             } else {
                 lines.push(Arc::new(line))
             }
@@ -80,11 +80,11 @@ pub trait LinesIfce {
 impl LinesIfce for Lines {
     fn contains_sub_lines_at(&self, sub_lines: &[Line], index: usize) -> bool {
         if sub_lines.len() + index > self.len() {
-            return false
+            return false;
         }
         for (line, sub_line) in self[index..index + sub_lines.len()].iter().zip(sub_lines) {
             if line != sub_line {
-                return false
+                return false;
             }
         }
         true
@@ -93,9 +93,9 @@ impl LinesIfce for Lines {
     fn find_first_sub_lines(&self, sub_lines: &[Line], start_index: usize) -> Option<usize> {
         for index in start_index..start_index + self.len() - sub_lines.len() + 1 {
             if self.contains_sub_lines_at(sub_lines, index) {
-                return Some(index)
+                return Some(index);
             }
-        };
+        }
         None
     }
 }
@@ -113,7 +113,12 @@ pub fn first_inequality_fm_head(lines1: &Lines, lines2: &Lines) -> Option<usize>
 }
 
 pub fn first_inequality_fm_tail(lines1: &Lines, lines2: &Lines) -> Option<usize> {
-    if let Some(index) = lines1.iter().rev().zip(lines2.iter().rev()).position(|(a, b)| a != b) {
+    if let Some(index) = lines1
+        .iter()
+        .rev()
+        .zip(lines2.iter().rev())
+        .position(|(a, b)| a != b)
+    {
         Some(index)
     } else {
         if lines1.len() > lines2.len() {
@@ -125,7 +130,6 @@ pub fn first_inequality_fm_tail(lines1: &Lines, lines2: &Lines) -> Option<usize>
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
