@@ -153,6 +153,10 @@ pub struct AbstractDiff {
 }
 
 impl AbstractDiff {
+    pub fn new(hunks: Vec<AbstractHunk>) -> AbstractDiff {
+        AbstractDiff{hunks}
+    }
+
     // Apply this diff to lines
     pub fn apply_to_lines<W>(&self, lines: &Lines, reverse: bool, err_w: &mut W, repd_file_path: Option<&Path>) -> ApplnResult
         where W: io::Write

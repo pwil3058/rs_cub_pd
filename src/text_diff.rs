@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::io;
 use std::num::ParseIntError;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::slice::Iter;
 
 use regex::Captures;
 
-use crate::abstract_diff::AbstractHunk;
+use crate::abstract_diff::{AbstractDiff, AbstractHunk, ApplnResult};
 use crate::lines::*;
 use crate::DiffFormat;
 use crate::MultiListIter;
@@ -55,14 +56,14 @@ pub trait TextDiffHunk {
     fn ante_lines(&self) -> Lines;
     fn post_lines(&self) -> Lines;
 
-    fn get_abstract_diff_hunk(self) -> AbstractHunk;
+    fn get_abstract_diff_hunk(&self) -> AbstractHunk;
 }
 
 pub struct TextDiff<H: TextDiffHunk> {
     lines_consumed: Option<usize>, // time saver
     diff_format: DiffFormat,
     header: TextDiffHeader,
-    hunks: Vec<H>
+    hunks: Vec<H>,
 }
 
 impl<H> TextDiff<H> where H: TextDiffHunk {
@@ -87,6 +88,14 @@ impl<H> TextDiff<H> where H: TextDiffHunk {
 
     pub fn diff_format(&self) -> DiffFormat {
         self.diff_format
+    }
+
+    pub fn apply_to_lines<W>(&mut self, lines: &Lines, reverse: bool, err_w: &mut W, repd_file_path: Option<&Path>) -> ApplnResult
+        where W: io::Write
+    {
+        let hunks = self.hunks.iter().map(|ref h| h.get_abstract_diff_hunk()).collect();
+        let abstract_diff = AbstractDiff::new(hunks);
+        abstract_diff.apply_to_lines(lines, reverse, err_w, repd_file_path)
     }
 }
 
@@ -150,11 +159,26 @@ pub trait TextDiffParser<H: TextDiffHunk> {
         let diff = TextDiff::<H> {
             lines_consumed: None, //index - start_index,
             diff_format: self.diff_format(),
-            header,
-            hunks
+            header: header,
+            hunks: hunks,
         };
         Ok(Some(diff))
     }
+}
+
+pub fn extract_source_lines<F: Fn(&Line) -> bool>(lines: &[Line], trim_left_n: usize, skip: F) -> Lines {
+    let mut trimmed_lines: Lines = vec![];
+    for (index, ref line) in lines.iter().enumerate() {
+        if skip(line) || line.starts_with("\\") {
+            continue
+        }
+        if (index + 1) == lines.len() || !lines[index + 1].starts_with("\\") {
+            trimmed_lines.push(Arc::new(line[trim_left_n..].to_string()));
+        } else {
+            trimmed_lines.push(Arc::new(line[trim_left_n..].trim_right_matches("\n").to_string()));
+        }
+    }
+    trimmed_lines
 }
 
 #[cfg(test)]

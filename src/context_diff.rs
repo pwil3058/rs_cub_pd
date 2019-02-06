@@ -20,12 +20,12 @@ use regex::{Captures, Regex};
 use crate::{DiffFormat, PATH_RE_STR, TIMESTAMP_RE_STR, ALT_TIMESTAMP_RE_STR};
 use crate::abstract_diff::{AbstractChunk, AbstractHunk};
 use crate::lines::{Line, Lines};
-use crate::text_diff::{DiffParseError, DiffParseResult, TextDiffHunk, TextDiffParser};
+use crate::text_diff::{DiffParseError, DiffParseResult, TextDiffHunk, TextDiffParser, extract_source_lines};
 
 pub struct ContextDiffChunk {
     offset: usize,
-    start: usize,
-    length: usize,
+    start_line_num: usize,
+    _length: usize,
     numlines: usize,
 }
 
@@ -45,24 +45,32 @@ impl TextDiffHunk for ContextDiffHunk {
     }
 
     fn ante_lines(&self) -> Lines {
-        Vec::new()
+        if self.ante_chunk.numlines == 1 {
+            let start = self.post_chunk.offset;
+            let end = self.post_chunk.offset + self.post_chunk.numlines;
+            extract_source_lines(&self.lines[start..end], 2, |l| l.starts_with("+"))
+        } else {
+            let start = self.ante_chunk.offset;
+            let end = self.ante_chunk.offset + self.ante_chunk.numlines;
+            extract_source_lines(&self.lines[start..end], 2, |_| false)
+        }
     }
 
     fn post_lines(&self) -> Lines {
-        Vec::new()
+        let start = self.post_chunk.offset;
+        let end = self.post_chunk.offset + self.post_chunk.numlines;
+        extract_source_lines(&self.lines[start..end], 2, |_| false)
     }
 
-    fn get_abstract_diff_hunk(self) -> AbstractHunk {
+    fn get_abstract_diff_hunk(&self) -> AbstractHunk {
         // NB: convert starting line numbers to 0 based indices
-        let ante_lines = self.ante_lines();
-        let post_lines = self.post_lines();
         let ante_chunk = AbstractChunk{
-            start_index: 0, // TODO: implement this properly
-            lines: Vec::new(),
+            start_index: self.ante_chunk.start_line_num - 1,
+            lines: self.ante_lines(),
         };
         let post_chunk = AbstractChunk{
-            start_index: 0,
-            lines: Vec::new(),
+            start_index: self.post_chunk.start_line_num - 1,
+            lines: self.post_lines(),
         };
         AbstractHunk::new(ante_chunk, post_chunk)
     }
@@ -153,7 +161,7 @@ impl TextDiffParser<ContextDiffHunk> for ContextDiffParser {
         let mut post_count = 0;
         let mut o_post_sal: Option<(usize, usize)> = None;
         let mut post_start_index = index;
-        while ante_count < ante_sal.1 {
+        while ante_count < ante_sal.1  {
             post_start_index = index;
             o_post_sal = self.get_post_sal_at(lines,index)?;
             if o_post_sal.is_some() {
@@ -164,7 +172,6 @@ impl TextDiffParser<ContextDiffHunk> for ContextDiffParser {
         }
         if o_post_sal.is_none() {
             if lines[index].starts_with(r"\ ") {
-                ante_count += 1;
                 index += 1;
             }
             post_start_index = index;
@@ -185,19 +192,18 @@ impl TextDiffParser<ContextDiffHunk> for ContextDiffParser {
             index += 1;
         }
         if index < lines.len() && lines[index].starts_with(r"\ ") {
-            post_count += 1;
             index += 1;
         }
         let ante_chunk = ContextDiffChunk {
             offset: ante_start_index - start_index,
-            start: ante_sal.0,
-            length: ante_sal.1,
+            start_line_num: ante_sal.0,
+            _length: ante_sal.1,
             numlines: post_start_index - ante_start_index,
         };
         let post_chunk = ContextDiffChunk {
             offset: post_start_index - start_index,
-            start: post_sal.0,
-            length: post_sal.1,
+            start_line_num: post_sal.0,
+            _length: post_sal.1,
             numlines: index - post_start_index,
         };
         let hunk = ContextDiffHunk{

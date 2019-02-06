@@ -15,7 +15,6 @@
 use std::convert::From;
 use std::str::FromStr;
 use std::slice::Iter;
-use std::sync::Arc;
 
 use lcs::{DiffComponent, LcsTable};
 use regex::{Captures, Regex};
@@ -63,23 +62,6 @@ pub struct UnifiedDiffHunk {
     pub post_chunk: UnifiedDiffChunk,
 }
 
-impl UnifiedDiffHunk {
-    fn lines_not_starting_with(&self, bad_start: &str) -> Lines {
-        let mut lines: Lines = vec![];
-        for (index, ref line) in self.lines[1..].iter().enumerate() {
-            if line.starts_with(bad_start) || line.starts_with("\\") {
-                continue
-            }
-            if (index + 1) == self.lines.len() || !line.starts_with("\\") {
-                lines.push(Arc::new(line[1..].to_string()));
-            } else {
-                lines.push(Arc::new(line[1..].trim_right_matches("\n").to_string()));
-            }
-        }
-        lines
-    }
-}
-
 impl TextDiffHunk for UnifiedDiffHunk {
     fn len(&self) -> usize {
         self.lines.len()
@@ -90,14 +72,14 @@ impl TextDiffHunk for UnifiedDiffHunk {
     }
 
     fn ante_lines(&self) -> Lines {
-        self.lines_not_starting_with("+")
+        extract_source_lines(&self.lines[1..], 1, |l| l.starts_with("+"))
     }
 
     fn post_lines(&self) -> Lines {
-        self.lines_not_starting_with("-")
+        extract_source_lines(&self.lines[1..], 1, |l| l.starts_with("-"))
     }
 
-    fn get_abstract_diff_hunk(self) -> AbstractHunk {
+    fn get_abstract_diff_hunk(&self) -> AbstractHunk {
         // NB: convert starting line numbers to 0 based indices
         // <https://www.gnu.org/software/diffutils/manual/html_node/Detailed-Unified.html#Detailed-Unified>
         // If a hunk contains just one line, only its start line number appears. Otherwise its line numbers
