@@ -19,7 +19,9 @@ use std::fmt;
 use std::io;
 use std::path::Path;
 
-use crate::lines::{first_inequality_fm_head, first_inequality_fm_tail, Line, Lines};
+use crate::lines::{
+    first_inequality_fm_head, first_inequality_fm_tail, Line, LineIfce, Lines, LinesIfce,
+};
 use crate::ApplyOffset;
 
 pub struct AbstractChunk {
