@@ -80,13 +80,12 @@ impl DiffPlus {
         } else {
             self.len()
         }
-
     }
 
     pub fn iter(&self) -> MultiListIter<Line> {
         let mut iter = self.diff.iter();
         if let Some(preamble) = &self.preamble {
-            iter.insert(0, preamble.iter());
+            iter.prepend(preamble.iter());
         };
         iter
     }
@@ -167,6 +166,5 @@ mod tests {
         assert!(result.is_some());
         let diff = result.unwrap();
         assert!(diff.iter().count() == diff.len());
-
     }
 }

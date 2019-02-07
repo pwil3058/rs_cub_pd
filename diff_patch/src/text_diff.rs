@@ -72,16 +72,6 @@ where
 {
     pub fn len(&self) -> usize {
         self.lines_consumed
-        //if let Some(length) = self.lines_consumed {
-            //length
-        //} else {
-            //let length = self
-                //.hunks
-                //.iter()
-                //.fold(self.header.lines.len(), |n, h| n + h.len());
-            //self.lines_consumed = Some(length);
-            //length
-        //}
     }
 
     pub fn iter(&self) -> MultiListIter<Line> {
