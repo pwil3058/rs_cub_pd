@@ -20,7 +20,7 @@ use regex::{Captures, Regex};
 use crate::abstract_diff::{AbstractChunk, AbstractHunk};
 use crate::lines::{Line, Lines};
 use crate::text_diff::{
-    extract_source_lines, DiffParseError, DiffParseResult, TextDiffHunk, TextDiffParser,
+    extract_source_lines, DiffParseError, DiffParseResult, TextDiff, TextDiffHunk, TextDiffParser,
 };
 use crate::{DiffFormat, ALT_TIMESTAMP_RE_STR, PATH_RE_STR, TIMESTAMP_RE_STR};
 
@@ -36,6 +36,8 @@ pub struct ContextDiffHunk {
     pub ante_chunk: ContextDiffChunk,
     pub post_chunk: ContextDiffChunk,
 }
+
+pub type ContextDiff = TextDiff<ContextDiffHunk>;
 
 impl TextDiffHunk for ContextDiffHunk {
     fn len(&self) -> usize {
@@ -78,7 +80,7 @@ impl TextDiffHunk for ContextDiffHunk {
     }
 }
 
-struct ContextDiffParser {
+pub struct ContextDiffParser {
     ante_file_cre: Regex,
     post_file_cre: Regex,
     hunk_start_cre: Regex,

@@ -255,7 +255,7 @@ mod tests {
             vec![]
         }
 
-        fn get_abstract_diff_hunk(self) -> AbstractHunk {
+        fn get_abstract_diff_hunk(&self) -> AbstractHunk {
             let a1 = AbstractChunk {
                 start_index: 1,
                 lines: Vec::<Line>::new(),

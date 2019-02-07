@@ -19,6 +19,7 @@ use std::slice::Iter;
 
 pub mod abstract_diff;
 pub mod context_diff;
+pub mod diff;
 pub mod diff_stats;
 pub mod lines;
 pub mod patch;

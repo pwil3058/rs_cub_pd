@@ -74,6 +74,8 @@ pub struct UnifiedDiffHunk {
     pub post_chunk: UnifiedDiffChunk,
 }
 
+pub type UnifiedDiff = TextDiff<UnifiedDiffHunk>;
+
 impl TextDiffHunk for UnifiedDiffHunk {
     fn len(&self) -> usize {
         self.lines.len()
@@ -194,7 +196,7 @@ impl From<&AbstractHunk> for UnifiedDiffHunk {
     }
 }
 
-struct UnifiedDiffParser {
+pub struct UnifiedDiffParser {
     ante_file_cre: Regex,
     post_file_cre: Regex,
     hunk_data_cre: Regex,
@@ -286,7 +288,7 @@ mod tests {
 
     #[test]
     fn get_hunk_at_works() {
-        let lines = Lines::read(&Path::new("test_diffs/test_1.diff")).unwrap();
+        let lines = Lines::read(&Path::new("../test_diffs/test_1.diff")).unwrap();
         let parser = UnifiedDiffParser::new();
         let result = parser.get_diff_at(&lines, 0);
         assert!(result.is_ok());

@@ -12,9 +12,10 @@
 //See the License for the specific language governing permissions and
 //limitations under the License.
 
-/// This module implements an abstract text diff object which is easy to
-/// patch text lines. Hooks to facilitate conversion of unified and
-/// context to abstract diffs are included.
+//! This module implements an abstract text diff object which is easy to
+//! patch text lines. Hooks to facilitate conversion of unified and
+//! context to abstract diffs are included.
+
 use std::fmt;
 use std::io;
 use std::path::Path;
