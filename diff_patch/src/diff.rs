@@ -13,15 +13,34 @@
 // limitations under the License.
 
 use crate::context_diff::{ContextDiff, ContextDiffParser};
-use crate::lines::Lines;
-use crate::preamble::{GitPreamble, Preamble, PreambleParser};
+use crate::lines::{Line, Lines};
+use crate::preamble::{GitPreamble, Preamble, PreambleIfce, PreambleParser};
 use crate::text_diff::{DiffParseResult, TextDiffParser};
 use crate::unified_diff::{UnifiedDiff, UnifiedDiffParser};
+use crate::MultiListIter;
 
 pub enum Diff {
     Unified(UnifiedDiff),
     Context(ContextDiff),
     GitPreambleOnly(GitPreamble),
+}
+
+impl Diff {
+    pub fn len(&self) -> usize {
+        match self {
+            Diff::Unified(diff) => diff.len(),
+            Diff::Context(diff) => diff.len(),
+            Diff::GitPreambleOnly(diff) => diff.len(),
+        }
+    }
+
+    pub fn iter(&self) -> MultiListIter<Line> {
+        match self {
+            Diff::Unified(diff) => diff.iter(),
+            Diff::Context(diff) => diff.iter(),
+            Diff::GitPreambleOnly(diff) => MultiListIter::new(vec![diff.iter()]),
+        }
+    }
 }
 
 pub struct DiffParser {
@@ -55,6 +74,23 @@ pub struct DiffPlus {
 }
 
 impl DiffPlus {
+    pub fn len(&self) -> usize {
+        if let Some(ref preamble) = self.preamble {
+            preamble.len() + self.diff.len()
+        } else {
+            self.len()
+        }
+
+    }
+
+    pub fn iter(&self) -> MultiListIter<Line> {
+        let mut iter = self.diff.iter();
+        if let Some(preamble) = &self.preamble {
+            iter.insert(0, preamble.iter());
+        };
+        iter
+    }
+
     pub fn preamble(&self) -> &Option<Preamble> {
         &self.preamble
     }
@@ -112,8 +148,25 @@ impl DiffPlusParser {
 
 #[cfg(test)]
 mod tests {
-    //use super::*;
+    use super::*;
+    use std::path::Path;
+
+    use crate::lines::*;
 
     #[test]
-    fn it_works() {}
+    fn get_diff_plus_at_works() {
+        let lines = Lines::read(&Path::new("../test_diffs/test_1.diff")).unwrap();
+        let parser = DiffPlusParser::new();
+        let result = parser.get_diff_plus_at(&lines, 0);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_some());
+
+        let result = parser.get_diff_plus_at(&lines, 12);
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let diff = result.unwrap();
+        assert!(diff.iter().count() == diff.len());
+
+    }
 }

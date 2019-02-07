@@ -190,6 +190,7 @@ impl DiffPreamble {
         self.post_file_path.clone().into()
     }
 }
+
 impl PreambleIfce for DiffPreamble {
     fn len(&self) -> usize {
         self.lines.len()
@@ -254,6 +255,13 @@ impl Preamble {
         match self {
             Preamble::Git(preamble) => preamble.len(),
             Preamble::Diff(preamble) => preamble.len(),
+        }
+    }
+
+    pub fn iter(&self) -> Iter<Line> {
+        match self {
+            Preamble::Git(preamble) => preamble.iter(),
+            Preamble::Diff(preamble) => preamble.iter(),
         }
     }
 }

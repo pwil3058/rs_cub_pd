@@ -51,17 +51,31 @@ impl ApplyOffset for usize {
 
 pub struct MultiListIter<'a, T> {
     iters: Vec<Iter<'a, T>>,
-    current_iter: Box<Option<Iter<'a, T>>>,
+    current_iter: usize,
+    //current_iter: Box<Option<Iter<'a, T>>>,
 }
 
 impl<'a, T> MultiListIter<'a, T> {
-    pub fn new(mut iters: Vec<Iter<'a, T>>) -> MultiListIter<T> {
-        iters.reverse();
-        let current_iter = Box::new(iters.pop());
+    pub fn new(iters: Vec<Iter<'a, T>>) -> MultiListIter<T> {
+        //iters.reverse();
+        //let current_iter = Box::new(iters.pop());
         MultiListIter {
-            iters,
-            current_iter,
+            iters: iters,
+            current_iter: 0,
         }
+    }
+
+    pub fn insert(&mut self, index: usize, iter: Iter<'a, T>) {
+        self.iters.insert(self.current_iter + index, iter);
+        //if index == 0 {
+            //let current_iter = self.current_iter.downcast<Option<Iter>>();
+            //if let Some(current_iter) = current_iter {
+                //self.iters.insert(0, *current_iter);
+            //}
+            //self.current_iter = Box::new(Some(iter));
+        //} else {
+            //self.iters.insert(index - 1, iter);
+        //}
     }
 }
 
@@ -70,14 +84,16 @@ impl<'a, T> Iterator for MultiListIter<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(ref mut iter) = *self.current_iter {
-                if let Some(item) = iter.next() {
+            //if let Some(ref mut iter) = *self.current_iter {
+            if self.current_iter < self.iters.len() {
+                //if let Some(item) = iter.next() {
+                if let Some(item) = self.iters[self.current_iter].next() {
                     return Some(item);
                 }
             } else {
                 break;
             };
-            self.current_iter = Box::new(self.iters.pop())
+            self.current_iter += 1 //= Box::new(self.iters.pop())
         }
         None
     }

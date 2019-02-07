@@ -60,7 +60,7 @@ pub trait TextDiffHunk {
 }
 
 pub struct TextDiff<H: TextDiffHunk> {
-    lines_consumed: Option<usize>, // time saver
+    lines_consumed: usize, // time saver
     diff_format: DiffFormat,
     header: TextDiffHeader,
     hunks: Vec<H>,
@@ -70,17 +70,18 @@ impl<H> TextDiff<H>
 where
     H: TextDiffHunk,
 {
-    pub fn len(&mut self) -> usize {
-        if let Some(length) = self.lines_consumed {
-            length
-        } else {
-            let length = self
-                .hunks
-                .iter()
-                .fold(self.header.lines.len(), |n, h| n + h.len());
-            self.lines_consumed = Some(length);
-            length
-        }
+    pub fn len(&self) -> usize {
+        self.lines_consumed
+        //if let Some(length) = self.lines_consumed {
+            //length
+        //} else {
+            //let length = self
+                //.hunks
+                //.iter()
+                //.fold(self.header.lines.len(), |n, h| n + h.len());
+            //self.lines_consumed = Some(length);
+            //length
+        //}
     }
 
     pub fn iter(&self) -> MultiListIter<Line> {
@@ -189,7 +190,7 @@ pub trait TextDiffParser<H: TextDiffHunk> {
             }
         }
         let diff = TextDiff::<H> {
-            lines_consumed: None, //index - start_index,
+            lines_consumed: index - start_index,
             diff_format: self.diff_format(),
             header: header,
             hunks: hunks,

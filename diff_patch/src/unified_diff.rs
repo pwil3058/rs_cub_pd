@@ -298,7 +298,7 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
-        let mut diff = result.unwrap();
+        let diff = result.unwrap();
         assert!(diff.iter().count() == diff.len());
     }
 }
