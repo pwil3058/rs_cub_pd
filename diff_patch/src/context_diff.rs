@@ -119,7 +119,7 @@ impl ContextDiffParser {
 
     fn get_ante_sal_at(
         &self,
-        lines: &Lines,
+        lines: &[Line],
         start_index: usize,
     ) -> DiffParseResult<(usize, usize)> {
         if let Some(captures) = self.hunk_ante_cre.captures(&lines[start_index]) {
@@ -134,7 +134,7 @@ impl ContextDiffParser {
 
     fn get_post_sal_at(
         &self,
-        lines: &Lines,
+        lines: &[Line],
         start_index: usize,
     ) -> DiffParseResult<Option<(usize, usize)>> {
         if let Some(captures) = self.hunk_post_cre.captures(&lines[start_index]) {
@@ -175,7 +175,7 @@ impl TextDiffParser<ContextDiffHunk> for ContextDiffParser {
 
     fn get_hunk_at(
         &self,
-        lines: &Lines,
+        lines: &[Line],
         start_index: usize,
     ) -> DiffParseResult<Option<ContextDiffHunk>> {
         if !self.hunk_start_cre.is_match(&lines[start_index]) {

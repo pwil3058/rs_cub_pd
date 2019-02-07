@@ -236,7 +236,7 @@ impl TextDiffParser<UnifiedDiffHunk> for UnifiedDiffParser {
 
     fn get_hunk_at(
         &self,
-        lines: &Lines,
+        lines: &[Line],
         start_index: usize,
     ) -> DiffParseResult<Option<UnifiedDiffHunk>> {
         let captures = if let Some(captures) = self.hunk_data_cre.captures(&lines[start_index]) {

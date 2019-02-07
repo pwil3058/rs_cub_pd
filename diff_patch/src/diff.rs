@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::context_diff::{ContextDiff, ContextDiffParser};
-use crate::lines::{Line, Lines};
+use crate::lines::Line;
 use crate::preamble::{GitPreamble, Preamble, PreambleIfce, PreambleParser};
 use crate::text_diff::{DiffParseResult, TextDiffParser};
 use crate::unified_diff::{UnifiedDiff, UnifiedDiffParser};
@@ -56,7 +56,7 @@ impl DiffParser {
         }
     }
 
-    pub fn get_diff_at(&self, lines: &Lines, start_index: usize) -> DiffParseResult<Option<Diff>> {
+    pub fn get_diff_at(&self, lines: &[Line], start_index: usize) -> DiffParseResult<Option<Diff>> {
         // try diff types in occurence likelihood order
         if let Some(result) = self.unified_diff_parser.get_diff_at(lines, start_index)? {
             Ok(Some(Diff::Unified(result)))
@@ -114,7 +114,7 @@ impl DiffPlusParser {
 
     pub fn get_diff_plus_at(
         &self,
-        lines: &Lines,
+        lines: &[Line],
         start_index: usize,
     ) -> DiffParseResult<Option<DiffPlus>> {
         if let Some(preamble) = self.preamble_parser.get_preamble_at(lines, start_index) {

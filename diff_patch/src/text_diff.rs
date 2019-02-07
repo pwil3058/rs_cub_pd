@@ -112,7 +112,7 @@ pub trait TextDiffParser<H: TextDiffHunk> {
     fn diff_format(&self) -> DiffFormat;
     fn ante_file_rec<'t>(&self, line: &'t Line) -> Option<Captures<'t>>;
     fn post_file_rec<'t>(&self, line: &'t Line) -> Option<Captures<'t>>;
-    fn get_hunk_at(&self, lines: &Lines, index: usize) -> DiffParseResult<Option<H>>;
+    fn get_hunk_at(&self, lines: &[Line], index: usize) -> DiffParseResult<Option<H>>;
 
     fn _get_file_data_fm_captures(&self, captures: &Captures) -> PathAndTimestamp {
         let file_path = if let Some(path) = captures.get(2) {
@@ -134,7 +134,7 @@ pub trait TextDiffParser<H: TextDiffHunk> {
 
     fn get_text_diff_header_at(
         &self,
-        lines: &Lines,
+        lines: &[Line],
         start_index: usize,
     ) -> DiffParseResult<Option<TextDiffHeader>> {
         let ante_pat = if let Some(ref captures) = self.ante_file_rec(&lines[start_index]) {
@@ -157,7 +157,7 @@ pub trait TextDiffParser<H: TextDiffHunk> {
 
     fn get_diff_at(
         &self,
-        lines: &Lines,
+        lines: &[Line],
         start_index: usize,
     ) -> DiffParseResult<Option<TextDiff<H>>> {
         if lines.len() - start_index < 2 {
@@ -287,7 +287,7 @@ mod tests {
 
         fn get_hunk_at(
             &self,
-            _lines: &Lines,
+            _lines: &[Line],
             _index: usize,
         ) -> DiffParseResult<Option<DummyDiffHunk>> {
             Ok(None)

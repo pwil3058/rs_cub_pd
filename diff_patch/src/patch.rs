@@ -18,6 +18,7 @@ use crate::diff::{DiffPlus, DiffPlusParser};
 use crate::diff_stats::DiffStatParser;
 use crate::lines::*;
 use crate::text_diff::DiffParseResult;
+use crate::MultiListIter;
 
 pub struct PatchHeader {
     lines: Lines,
@@ -86,6 +87,21 @@ pub struct Patch {
     rubbish: Vec<Lines>, // some tools put rubbish between diffs
 }
 
+impl Patch {
+    pub fn len(&self) -> usize {
+        self.length
+    }
+
+    pub fn iter(&self) -> MultiListIter<Line> {
+        let mut mli = MultiListIter::<Line>::new(vec![self.header.iter()]);
+        for (diff_plus, rubbish) in self.diff_pluses.iter().zip(self.rubbish.iter()) {
+            mli.append(&mut diff_plus.iter());
+            mli.push(rubbish.iter());
+        }
+        mli
+    }
+}
+
 pub struct PatchParser {
     diff_plus_parser: DiffPlusParser,
 }
@@ -97,8 +113,37 @@ impl PatchParser {
         }
     }
 
-    pub fn parse_lines(lines: &[Line]) -> DiffParseResult<Option<Patch>> {
-        Ok(None)
+    pub fn parse_lines(&self, lines: &[Line]) -> DiffParseResult<Option<Patch>> {
+        let mut diffs_start_at: Option<usize> = None;
+        let mut rubbish_starts_at = 0;
+        let mut index = 0;
+        let mut diff_pluses: Vec<DiffPlus> = Vec::new();
+        let mut rubbish: Vec<Lines> = Vec::new();
+        while index < lines.len() {
+            if let Some(diff_plus) = self.diff_plus_parser.get_diff_plus_at(lines, index)? {
+                if diffs_start_at.is_some() {
+                    rubbish.push(lines[rubbish_starts_at..index].to_vec());
+                } else {
+                    diffs_start_at = Some(index);
+                }
+                index += diff_plus.len();
+                rubbish_starts_at = index;
+                diff_pluses.push(diff_plus);
+            } else {
+                index += 1;
+            }
+        }
+        if let Some(end_of_header) = diffs_start_at {
+            let header = PatchHeader::new(&lines[0..end_of_header]);
+            Ok(Some(Patch {
+                length: lines.len(),
+                header,
+                diff_pluses,
+                rubbish,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 }
 

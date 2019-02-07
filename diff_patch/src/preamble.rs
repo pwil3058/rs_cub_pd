@@ -28,7 +28,7 @@ pub trait PreambleIfce {
 
 pub trait PreambleParserIfce<P: PreambleIfce> {
     fn new() -> Self;
-    fn get_preamble_at(&self, lines: &Lines, start_index: usize) -> Option<P>;
+    fn get_preamble_at(&self, lines: &[Line], start_index: usize) -> Option<P>;
 }
 
 pub struct GitPreamble {
@@ -121,7 +121,7 @@ impl PreambleParserIfce<GitPreamble> for GitPreambleParser {
         }
     }
 
-    fn get_preamble_at(&self, lines: &Lines, start_index: usize) -> Option<GitPreamble> {
+    fn get_preamble_at(&self, lines: &[Line], start_index: usize) -> Option<GitPreamble> {
         let captures = if let Some(captures) = self.diff_cre.captures(&lines[start_index]) {
             captures
         } else {
@@ -216,7 +216,7 @@ impl PreambleParserIfce<DiffPreamble> for DiffPreambleParser {
         }
     }
 
-    fn get_preamble_at(&self, lines: &Lines, start_index: usize) -> Option<DiffPreamble> {
+    fn get_preamble_at(&self, lines: &[Line], start_index: usize) -> Option<DiffPreamble> {
         let captures = if let Some(captures) = self.cre.captures(&lines[start_index]) {
             captures
         } else {
@@ -268,18 +268,25 @@ impl Preamble {
 
 pub struct PreambleParser {
     git_preamble_parser: GitPreambleParser,
+    diff_preamble_parser: DiffPreambleParser,
 }
 
 impl PreambleParser {
     pub fn new() -> PreambleParser {
         PreambleParser {
             git_preamble_parser: GitPreambleParser::new(),
+            diff_preamble_parser: DiffPreambleParser::new(),
         }
     }
 
-    pub fn get_preamble_at(&self, lines: &Lines, start_index: usize) -> Option<Preamble> {
+    pub fn get_preamble_at(&self, lines: &[Line], start_index: usize) -> Option<Preamble> {
         if let Some(preamble) = self.git_preamble_parser.get_preamble_at(lines, start_index) {
             Some(Preamble::Git(preamble))
+        } else if let Some(preamble) = self
+            .diff_preamble_parser
+            .get_preamble_at(lines, start_index)
+        {
+            Some(Preamble::Diff(preamble))
         } else {
             None
         }
