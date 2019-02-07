@@ -14,8 +14,10 @@
 
 use std::slice::Iter;
 
+use crate::diff::{DiffPlus, DiffPlusParser};
 use crate::diff_stats::DiffStatParser;
 use crate::lines::*;
+use crate::text_diff::DiffParseResult;
 
 pub struct PatchHeader {
     lines: Lines,
@@ -74,6 +76,29 @@ impl PatchHeader {
 
     pub fn iter_diff_stats_lnes(&self) -> Iter<Line> {
         self.lines[self.diff_stats_lines.0..self.diff_stats_lines.1].iter()
+    }
+}
+
+pub struct Patch {
+    length: usize,
+    header: PatchHeader,
+    diff_pluses: Vec<DiffPlus>,
+    rubbish: Vec<Lines>, // some tools put rubbish between diffs
+}
+
+pub struct PatchParser {
+    diff_plus_parser: DiffPlusParser,
+}
+
+impl PatchParser {
+    pub fn new() -> PatchParser {
+        PatchParser {
+            diff_plus_parser: DiffPlusParser::new(),
+        }
+    }
+
+    pub fn parse_lines(lines: &[Line]) -> DiffParseResult<Option<Patch>> {
+        Ok(None)
     }
 }
 
