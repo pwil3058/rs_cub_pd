@@ -16,6 +16,7 @@ use std::str::FromStr;
 
 use regex::Regex;
 
+use crate::git_base85::GitBase85;
 use crate::lines::{Line, Lines};
 use crate::text_diff::{DiffParseError, DiffParseResult};
 use crate::DiffFormat;
@@ -39,6 +40,7 @@ pub struct GitBinaryDiffParser {
     data_start_cre: Regex,
     blank_line_cre: Regex,
     data_line_cre: Regex,
+    git_base85: GitBase85,
     //START_CRE = re.compile(r"^GIT binary patch$")
     //DATA_START_CRE = re.compile(r"^(literal|delta) (\d+)$")
     //BLANK_LINE_CRE = re.compile(r"^\s*$")
@@ -55,6 +57,7 @@ impl GitBinaryDiffParser {
                 r"^([a-zA-Z])(([0-9a-zA-Z!#$%&()*+;<=>?@^_`{|}~-]{5})+)(\n)?$",
             )
             .unwrap(),
+            git_base85: GitBase85::new(),
         }
     }
 
@@ -74,30 +77,28 @@ impl GitBinaryDiffParser {
         let method = captures.get(1).unwrap().as_str();
         let size = usize::from_str(captures.get(2).unwrap().as_str())
             .map_err(|e| DiffParseError::ParseNumberError(e, start_index + 1))?;
-
-        Ok(GitBinaryDiffData {})
-        //smatch = False if start_index >= len(lines) else DATA_START_CRE.match(lines[start_index])
-        //if not smatch:
-        //return (None, start_index)
-        //method = smatch.group(1)
-        //size = int(smatch.group(2))
-        //index = start_index + 1
-        //while index < len(lines) and gitbase85.LINE_CRE.match(lines[index]):
-        //index += 1
-        //end_data = index
-        //# absorb the blank line if there is one
-        //if BLANK_LINE_CRE.match(lines[index]):
-        //index += 1
+        let mut index = start_index + 1;
+        while index < lines.len() && self.data_line_cre.is_match(&lines[index]) {
+            index += 1;
+        }
+        let end_data = index;
+        // absorb the blank line if there is one
+        if index < lines.len() && self.blank_line_cre.is_match(&lines[index]) {
+            index += 1;
+        }
+        //let data_zipped = self.git_base85.decode_lines(&lines[start_index..end_data])?;
         //dlines = lines[start_index:index]
         //try:
-        //data_zipped = gitbase85.decode_lines(lines[start_index + 1:end_data])
+        //  data_zipped = gitbase85.decode_lines(lines[start_index + 1:end_data])
         //except AssertionError:
-        //raise DataError(_("Inconsistent git binary patch data."), lineno=start_index)
+        //  raise DataError(_("Inconsistent git binary patch data."), lineno=start_index)
         //raw_size = len(zlib.decompress(bytes(data_zipped)))
         //if raw_size != size:
-        //emsg = _("Git binary patch expected {0} bytes. Got {1} bytes.").format(size, raw_size)
-        //raise DataError(emsg, lineno=start_index)
+        //  emsg = _("Git binary patch expected {0} bytes. Got {1} bytes.").format(size, raw_size)
+        //  raise DataError(emsg, lineno=start_index)
         //return (GitBinaryDiffData(dlines, method, raw_size, data_zipped), index)
+
+        Ok(GitBinaryDiffData {})
     }
 
     pub fn get_diff_at(

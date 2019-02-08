@@ -14,72 +14,132 @@
 
 use std::collections::HashMap;
 
-const ENCODE: &[u8; 85] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
+use crate::lines::Line;
 
-struct Encoding {
-    string: String,
+const ENCODE: &[u8; 85] =
+    b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
+const MAX_VAL: u64 = 0xFFFFFFFF;
+
+pub struct Encoding {
+    string: Vec<u8>,
     size: usize,
 }
 
-struct GitBase85 {
-    decode_map: HashMap<char, usize>
+pub struct GitBase85 {
+    decode_map: HashMap<u8, u64>,
 }
 
 impl GitBase85 {
     pub fn new() -> GitBase85 {
         let mut decode_map = HashMap::new();
         for (index, chr) in ENCODE.iter().enumerate() {
-            decode_map.insert(*chr as char, index);
+            decode_map.insert(*chr, index as u64);
         }
         GitBase85 { decode_map }
     }
 
-    fn decode(&self, encoding: Encoding) -> Result<Vec<u8>, String> {
-        let mut data = Vec::<u8>::with_capacity(encoding.size);
-        let d_index: usize = 0;
-        let s_index:  usize = 0;
-        while d_index < encoding.size {
-            let acc: usize = 0;
+    pub fn encode(&self, data: &[u8]) -> Encoding {
+        let mut string: Vec<u8> = Vec::new();
+        let mut index = 0;
+        while index < data.len() {
+            let mut acc: u64 = 0;
+            for cnt in [24, 16, 8, 0].iter() {
+                acc |= (data[index] as u64) << cnt;
+                index += 1;
+                if index == data.len() {
+                    break;
+                }
+            }
+            let mut snippet: Vec<u8> = Vec::new();
             for _ in 0..5 {
-                //if let Some(d) = self.decode_map.get(encoding.string[d_index]) {
-                    //acc = acc * 85 + d;
-                //} else {
-                    //return Err("Illegal git base 85 character".to_string())
-                //}
+                let val = acc % 85;
+                acc /= 85;
+                snippet.insert(0, ENCODE[val as usize]);
+            }
+            string.append(&mut snippet);
+        }
+        Encoding {
+            string: string,
+            size: data.len(),
+        }
+    }
+
+    fn decode(&self, encoding: &Encoding) -> Result<Vec<u8>, String> {
+        let mut data = vec![0u8; encoding.size];
+        let mut d_index: usize = 0;
+        let mut s_index: usize = 0;
+        while d_index < encoding.size {
+            let mut acc: u64 = 0;
+            for _ in 0..5 {
+                if s_index == encoding.string.len() {
+                    break;
+                }
+                if let Some(ch) = encoding.string.get(s_index) {
+                    if let Some(d) = self.decode_map.get(ch) {
+                        acc = acc * 85 + d;
+                    } else {
+                        return Err("Illegal git base 85 character".to_string());
+                    }
+                    s_index += 1;
+                } else {
+                    return Err(format!("{0}: base85 source access out of range.", s_index));
+                }
+            }
+            if acc > MAX_VAL {
+                return Err(format!("{0}: base85 accumulator overflow.", acc));
+            }
+            for _ in 0..4 {
+                if d_index == encoding.size {
+                    break;
+                }
+                acc = (acc << 8) | (acc >> 24);
+                data[d_index] = (acc % 256) as u8;
+                d_index += 1;
             }
         }
         Ok(data)
     }
-//def decode(encoding):
-    //assert is_consistent(encoding)
-    //data = bytearray(encoding.size)
-    //dindex = 0
-    //sindex = 0
-    //while dindex < encoding.size:
-        //acc = 0
-        //for _cnt in range(5):
-            //try:
-                //acc = acc * 85 + DECODE[encoding.string[sindex]]
-            //except KeyError:
-                //raise ParseError(_("Illegal git base 85 character"))
-            //sindex += 1
-        //if acc > _MAX_VAL:
-            //raise RangeError(_("{0} too big.").format(acc))
-        //for _cnt in range(4):
-            //if dindex == encoding.size:
-                //break
-            //acc = (acc << 8) | (acc >> 24)
-            //data[dindex] = acc % 256
-            //dindex += 1
-    //return data
+
+    pub fn decode_size(&self, ch: u8) -> usize {
+        0
+    }
+
+    pub fn decode_line(&self, line: &Line) -> Result<Vec<u8>, String> {
+        let string = line.trim_right().as_bytes();
+        let size = self.decode_size(string[0]);
+        let encoding = Encoding {
+            string: string[1..].to_vec(),
+            size,
+        };
+        Ok(self.decode(&encoding)?)
+    }
+
+    pub fn decode_lines(&self, lines: &[Line]) -> Result<Vec<u8>, String> {
+        let mut data: Vec<u8> = Vec::new();
+        for line in lines.iter() {
+            data.append(&mut self.decode_line(line)?);
+        }
+        Ok(data)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    //use super::*;
+    use super::*;
+
+    // test over a range of data sizes
+    const TEST_DATA: &[u8] = b"uioyf2oyqo;3nhi8uydjauyo98ua 54\000jhkh\034hh;kjjh";
 
     #[test]
-    fn it_works() {
-
+    fn git_base85_encode_decode_work() {
+        let git_base85 = GitBase85::new();
+        for i in 0..10 {
+            let encoding = git_base85.encode(&TEST_DATA[i..]);
+            //println!("ENCODING: {:?}", encoding);
+            let decoding = git_base85.decode(&encoding).unwrap();
+            println!("   INPUT: {:?}", TEST_DATA[i..].to_vec());
+            println!("DECODING: {:?}", decoding);
+            assert_eq!(decoding, TEST_DATA[i..].to_vec());
+        }
     }
 }
