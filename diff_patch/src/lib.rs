@@ -21,6 +21,8 @@ pub mod abstract_diff;
 pub mod context_diff;
 pub mod diff;
 pub mod diff_stats;
+pub mod git_base85;
+pub mod git_binary_diff;
 pub mod lines;
 pub mod patch;
 pub mod preamble;
