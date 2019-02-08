@@ -14,7 +14,7 @@
 
 use std::fs::File;
 use std::io::prelude::*;
-use std::io::{self, BufReader};
+use std::io::{self, BufReader, Read};
 use std::path::Path;
 pub use std::sync::Arc;
 
@@ -42,9 +42,9 @@ pub trait LineIfce {
 impl LineIfce for Line {}
 
 pub trait LinesIfce {
-    fn read(path: &Path) -> io::Result<Lines> {
-        let file = File::open(path)?;
-        let mut reader = BufReader::new(file);
+    fn read<R: Read>(read: R) -> io::Result<Lines> {
+        //let file = File::open(path)?;
+        let mut reader = BufReader::new(read);
         let mut lines = vec![];
         loop {
             let mut line = String::new();
@@ -55,6 +55,11 @@ pub trait LinesIfce {
             }
         }
         Ok(lines)
+    }
+
+    fn read_from(file_path: &Path) -> io::Result<Lines> {
+        let file = File::open(file_path)?;
+        Self::read(file)
     }
 
     fn from_string(string: &str) -> Lines {
