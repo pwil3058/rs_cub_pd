@@ -87,12 +87,12 @@ impl DiffStatParser {
             r"^#? (\d+) files? changed",
             r"(, (\d+) insertions?\(\+\))?",
             r"(, (\d+) deletions?\(-\))?",
-            r"(, (\d+) modifications?\(\!\))?(\n)?$",
+            r"(, (\d+) modifications?\(!\))?(\n)?$",
         );
         DiffStatParser {
             empty_cre: Regex::new(r"^#? 0 files changed(\n)?$").unwrap(),
             end_cre: Regex::new(&end_cre_str).unwrap(),
-            file_stats_cre: Regex::new(r"^#? (\S+)\s*\|((binary)|(\s*(\d+)(\s+\+*-*\!*)?))(\n)$")
+            file_stats_cre: Regex::new(r"^#? (\S+)\s*\|((binary)|(\s*(\d+)(\s+\+*-*!*)?))(\n)$")
                 .unwrap(),
             blank_line_cre: Regex::new(r"^\s*(\n)$").unwrap(),
             divider_line_cre: Regex::new(r"^---(\n)$").unwrap(),

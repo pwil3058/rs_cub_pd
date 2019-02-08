@@ -100,6 +100,10 @@ impl Patch {
         }
         mli
     }
+
+    pub fn num_files(&self) -> usize {
+        self.diff_pluses.len()
+    }
 }
 
 pub struct PatchParser {
@@ -133,6 +137,7 @@ impl PatchParser {
                 index += 1;
             }
         }
+        rubbish.push(lines[rubbish_starts_at..].to_vec());
         if let Some(end_of_header) = diffs_start_at {
             let header = PatchHeader::new(&lines[0..end_of_header]);
             Ok(Some(Patch {
@@ -149,8 +154,25 @@ impl PatchParser {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::path::Path;
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn patch_parse_lines_works() {
+        let lines = Lines::read_from(&Path::new("../test_diffs/test_1.diff")).unwrap();
+        let lines_length = lines.len();
+        let parser = PatchParser::new();
+        let result = parser.parse_lines(&lines);
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let patch = result.unwrap();
+        for (line1, line2) in patch.iter().zip(lines.iter()) {
+            assert!(line1 == line2);
+        }
+        assert!(patch.len() == lines_length);
+        assert!(patch.iter().count() == lines_length);
+        assert!(patch.iter().count() == patch.len());
+        assert!(patch.num_files() == 2);
     }
 }
