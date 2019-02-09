@@ -158,7 +158,7 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn patch_parse_lines_works() {
+    fn patch_parse_lines_works_text_only() {
         let lines = Lines::read_from(&Path::new("../test_diffs/test_1.diff")).unwrap();
         let lines_length = lines.len();
         let parser = PatchParser::new();
@@ -174,5 +174,24 @@ mod tests {
         assert!(patch.iter().count() == lines_length);
         assert!(patch.iter().count() == patch.len());
         assert!(patch.num_files() == 2);
+    }
+
+    #[test]
+    fn patch_parse_lines_works_binary_only() {
+        let lines = Lines::read_from(&Path::new("../test_diffs/test_2.binary_diff")).unwrap();
+        let lines_length = lines.len();
+        let parser = PatchParser::new();
+        let result = parser.parse_lines(&lines);
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let patch = result.unwrap();
+        for (line1, line2) in patch.iter().zip(lines.iter()) {
+            assert!(line1 == line2);
+        }
+        assert!(patch.len() == lines_length);
+        assert!(patch.iter().count() == lines_length);
+        assert!(patch.iter().count() == patch.len());
+        assert!(patch.num_files() == 6);
     }
 }

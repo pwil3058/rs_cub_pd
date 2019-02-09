@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::context_diff::{ContextDiff, ContextDiffParser};
+use crate::git_binary_diff::{GitBinaryDiff, GitBinaryDiffParser};
 use crate::lines::Line;
 use crate::preamble::{GitPreamble, Preamble, PreambleIfce, PreambleParser};
 use crate::text_diff::{DiffParseResult, TextDiffParser};
@@ -22,6 +23,7 @@ use crate::MultiListIter;
 pub enum Diff {
     Unified(UnifiedDiff),
     Context(ContextDiff),
+    GitBinary(GitBinaryDiff),
     GitPreambleOnly(GitPreamble),
 }
 
@@ -30,6 +32,7 @@ impl Diff {
         match self {
             Diff::Unified(diff) => diff.len(),
             Diff::Context(diff) => diff.len(),
+            Diff::GitBinary(diff) => diff.len(),
             Diff::GitPreambleOnly(diff) => diff.len(),
         }
     }
@@ -38,6 +41,7 @@ impl Diff {
         match self {
             Diff::Unified(diff) => diff.iter(),
             Diff::Context(diff) => diff.iter(),
+            Diff::GitBinary(diff) => MultiListIter::new(vec![diff.iter()]),
             Diff::GitPreambleOnly(diff) => MultiListIter::new(vec![diff.iter()]),
         }
     }
@@ -46,6 +50,7 @@ impl Diff {
 pub struct DiffParser {
     context_diff_parser: ContextDiffParser,
     unified_diff_parser: UnifiedDiffParser,
+    git_binary_diff_parser: GitBinaryDiffParser,
 }
 
 impl DiffParser {
@@ -53,6 +58,7 @@ impl DiffParser {
         DiffParser {
             context_diff_parser: ContextDiffParser::new(),
             unified_diff_parser: UnifiedDiffParser::new(),
+            git_binary_diff_parser: GitBinaryDiffParser::new(),
         }
     }
 
@@ -60,6 +66,8 @@ impl DiffParser {
         // try diff types in occurence likelihood order
         if let Some(result) = self.unified_diff_parser.get_diff_at(lines, start_index)? {
             Ok(Some(Diff::Unified(result)))
+        } else if let Some(result) = self.git_binary_diff_parser.get_diff_at(lines, start_index)? {
+            Ok(Some(Diff::GitBinary(result)))
         } else if let Some(result) = self.context_diff_parser.get_diff_at(lines, start_index)? {
             Ok(Some(Diff::Context(result)))
         } else {
@@ -153,7 +161,7 @@ mod tests {
     use crate::lines::*;
 
     #[test]
-    fn get_diff_plus_at_works() {
+    fn get_diff_plus_at_works_for_text_diffs() {
         let lines = Lines::read_from(&Path::new("../test_diffs/test_1.diff")).unwrap();
         let parser = DiffPlusParser::new();
         let result = parser.get_diff_plus_at(&lines, 0);
@@ -166,5 +174,33 @@ mod tests {
         assert!(result.is_some());
         let diff = result.unwrap();
         assert!(diff.iter().count() == diff.len());
+    }
+
+    #[test]
+    fn get_diff_plus_at_works_for_binary_diffs() {
+        let lines = Lines::read_from(&Path::new("../test_diffs/test_2.binary_diff")).unwrap();
+        let parser = DiffPlusParser::new();
+        let result = parser.get_diff_plus_at(&lines, 0);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_some());
+
+        // TODO: find out why this causes stack overflow
+        // without a preamble
+        //let result = parser.get_diff_plus_at(&lines, 12);
+        //assert!(result.is_ok());
+        //let result = result.unwrap();
+        //assert!(result.is_some());
+        //let diff = result.unwrap();
+        //assert!(diff.iter().count() == diff.len());
+
+        // TODO: find out why these cause stack overflow
+        //for start_index in &[0, 9, 19, 28, 37, 46] {
+        //    let result = parser.get_diff_plus_at(&lines, *start_index);
+        //    assert!(result.is_ok());
+        //    let result = result.unwrap();
+        //    assert!(result.is_some());
+        //    let diff = result.unwrap();
+        //    assert!(diff.iter().count() == diff.len());
+        //}
     }
 }
