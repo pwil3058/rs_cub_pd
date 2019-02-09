@@ -73,10 +73,9 @@ impl<'a, T> MultiListIter<'a, T> {
     }
 
     pub fn append(&mut self, rhs: &mut MultiListIter<'a, T>) {
-        for iter in rhs.iters.drain(rhs.current_iter..) {
-            self.iters.push(iter)
-        }
-    }
+        let mut v = rhs.iters[rhs.current_iter..].to_vec();
+        self.iters.append(&mut v);
+   }
 }
 
 impl<'a, T> Iterator for MultiListIter<'a, T> {

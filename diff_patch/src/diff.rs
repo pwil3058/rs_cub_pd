@@ -86,7 +86,7 @@ impl DiffPlus {
         if let Some(ref preamble) = self.preamble {
             preamble.len() + self.diff.len()
         } else {
-            self.len()
+            self.diff.len()
         }
     }
 
@@ -184,23 +184,20 @@ mod tests {
         assert!(result.is_ok());
         assert!(result.unwrap().is_some());
 
-        // TODO: find out why this causes stack overflow
-        // without a preamble
-        //let result = parser.get_diff_plus_at(&lines, 12);
-        //assert!(result.is_ok());
-        //let result = result.unwrap();
-        //assert!(result.is_some());
-        //let diff = result.unwrap();
-        //assert!(diff.iter().count() == diff.len());
+        let result = parser.get_diff_plus_at(&lines, 12);
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let diff = result.unwrap();
+        assert!(diff.iter().count() == diff.len());
 
-        // TODO: find out why these cause stack overflow
-        //for start_index in &[0, 9, 19, 28, 37, 46] {
-        //    let result = parser.get_diff_plus_at(&lines, *start_index);
-        //    assert!(result.is_ok());
-        //    let result = result.unwrap();
-        //    assert!(result.is_some());
-        //    let diff = result.unwrap();
-        //    assert!(diff.iter().count() == diff.len());
-        //}
+        for start_index in &[0, 9, 19, 28, 37, 46] {
+            let result = parser.get_diff_plus_at(&lines, *start_index);
+            assert!(result.is_ok());
+            let result = result.unwrap();
+            assert!(result.is_some());
+            let diff = result.unwrap();
+            assert!(diff.iter().count() == diff.len());
+        }
     }
 }
