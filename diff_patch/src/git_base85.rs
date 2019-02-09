@@ -15,6 +15,8 @@
 use std::collections::HashMap;
 
 use crate::lines::Line;
+use crate::text_diff::{DiffParseError, DiffParseResult};
+use crate::DiffFormat;
 
 const ENCODE: &[u8; 85] =
     b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
@@ -64,7 +66,7 @@ impl GitBase85 {
         }
     }
 
-    fn decode(&self, encoding: &Encoding) -> Result<Vec<u8>, String> {
+    fn decode(&self, encoding: &Encoding) -> DiffParseResult<Vec<u8>> {
         let mut data = vec![0u8; encoding.size];
         let mut d_index: usize = 0;
         let mut s_index: usize = 0;
@@ -78,15 +80,23 @@ impl GitBase85 {
                     if let Some(d) = self.decode_map.get(ch) {
                         acc = acc * 85 + d;
                     } else {
-                        return Err("Illegal git base 85 character".to_string());
+                        return Err(DiffParseError::Base85Error(
+                            "Illegal git base 85 character".to_string(),
+                        ));
                     }
                     s_index += 1;
                 } else {
-                    return Err(format!("{0}: base85 source access out of range.", s_index));
+                    return Err(DiffParseError::Base85Error(format!(
+                        "{0}: base85 source access out of range.",
+                        s_index
+                    )));
                 }
             }
             if acc > MAX_VAL {
-                return Err(format!("{0}: base85 accumulator overflow.", acc));
+                return Err(DiffParseError::Base85Error(format!(
+                    "{0}: base85 accumulator overflow.",
+                    acc
+                )));
             }
             for _ in 0..4 {
                 if d_index == encoding.size {
@@ -100,13 +110,22 @@ impl GitBase85 {
         Ok(data)
     }
 
-    pub fn decode_size(&self, ch: u8) -> usize {
-        0
+    pub fn decode_size(&self, ch: u8) -> DiffParseResult<usize> {
+        if 'A' as u8 <= ch && ch <= 'Z' as u8 {
+            Ok((ch - 'A' as u8) as usize)
+        } else if 'a' as u8 <= ch && ch <= 'z' as u8 {
+            Ok((ch - 'a' as u8 + 27) as usize)
+        } else {
+            Err(DiffParseError::UnexpectedInput(
+                DiffFormat::GitBinary,
+                format!("{}: expected char in range [azAZ]", ch as char),
+            ))
+        }
     }
 
-    pub fn decode_line(&self, line: &Line) -> Result<Vec<u8>, String> {
+    pub fn decode_line(&self, line: &Line) -> DiffParseResult<Vec<u8>> {
         let string = line.trim_right().as_bytes();
-        let size = self.decode_size(string[0]);
+        let size = self.decode_size(string[0])?;
         let encoding = Encoding {
             string: string[1..].to_vec(),
             size,
@@ -114,7 +133,7 @@ impl GitBase85 {
         Ok(self.decode(&encoding)?)
     }
 
-    pub fn decode_lines(&self, lines: &[Line]) -> Result<Vec<u8>, String> {
+    pub fn decode_lines(&self, lines: &[Line]) -> DiffParseResult<Vec<u8>> {
         let mut data: Vec<u8> = Vec::new();
         for line in lines.iter() {
             data.append(&mut self.decode_line(line)?);
@@ -135,10 +154,7 @@ mod tests {
         let git_base85 = GitBase85::new();
         for i in 0..10 {
             let encoding = git_base85.encode(&TEST_DATA[i..]);
-            //println!("ENCODING: {:?}", encoding);
             let decoding = git_base85.decode(&encoding).unwrap();
-            println!("   INPUT: {:?}", TEST_DATA[i..].to_vec());
-            println!("DECODING: {:?}", decoding);
             assert_eq!(decoding, TEST_DATA[i..].to_vec());
         }
     }

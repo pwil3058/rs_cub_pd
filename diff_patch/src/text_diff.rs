@@ -31,7 +31,9 @@ pub enum DiffParseError {
     ParseNumberError(ParseIntError, usize),
     UnexpectedEndOfInput,
     UnexpectedEndHunk(DiffFormat, usize),
+    UnexpectedInput(DiffFormat, String),
     SyntaxError(DiffFormat, usize),
+    Base85Error(String),
 }
 
 pub type DiffParseResult<T> = Result<T, DiffParseError>;

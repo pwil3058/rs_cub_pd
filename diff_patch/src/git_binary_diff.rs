@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt;
+use std::slice::Iter;
 use std::str::FromStr;
 
 use regex::Regex;
@@ -21,18 +23,72 @@ use crate::lines::{Line, Lines};
 use crate::text_diff::{DiffParseError, DiffParseResult};
 use crate::DiffFormat;
 
-pub struct GitBinaryDiffData {}
+#[derive(Debug)]
+pub enum GitBinaryDiffMethod {
+    Delta,
+    Literal,
+}
 
-impl GitBinaryDiffData {
-    pub fn len(&self) -> usize {
-        0
+impl fmt::Display for GitBinaryDiffMethod {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GitBinaryDiffMethod::Delta => write!(f, "delta"),
+            GitBinaryDiffMethod::Literal => write!(f, "literal"),
+        }
     }
 }
 
+impl FromStr for GitBinaryDiffMethod {
+    type Err = DiffParseError;
+
+    fn from_str(string: &str) -> Result<Self, Self::Err> {
+        match string {
+            "delta" => Ok(GitBinaryDiffMethod::Delta),
+            "literal" => Ok(GitBinaryDiffMethod::Literal),
+            _ => Err(DiffParseError::UnexpectedInput(
+                DiffFormat::GitBinary,
+                format!(
+                    "{}: unknown method expected \"delta\" or \"literal\"",
+                    string
+                ),
+            )),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct GitBinaryDiffData {
+    lines: Lines,
+    method: GitBinaryDiffMethod,
+    len_raw: usize,
+    data_zipped: Vec<u8>,
+}
+
+impl GitBinaryDiffData {
+    pub fn len(&self) -> usize {
+        self.lines.len()
+    }
+
+    pub fn iter(&self) -> Iter<Line> {
+        self.lines.iter()
+    }
+}
+
+#[derive(Debug)]
 pub struct GitBinaryDiff {
     lines: Lines,
     forward: GitBinaryDiffData,
     reverse: GitBinaryDiffData,
+}
+
+impl GitBinaryDiff {
+    pub fn len(&self) -> usize {
+        self.lines.len()
+    }
+
+    pub fn iter(&self) -> Iter<Line> {
+        self.lines.iter()
+    }
 }
 
 pub struct GitBinaryDiffParser {
@@ -41,10 +97,6 @@ pub struct GitBinaryDiffParser {
     blank_line_cre: Regex,
     data_line_cre: Regex,
     git_base85: GitBase85,
-    //START_CRE = re.compile(r"^GIT binary patch$")
-    //DATA_START_CRE = re.compile(r"^(literal|delta) (\d+)$")
-    //BLANK_LINE_CRE = re.compile(r"^\s*$")
-    //DATA_LINE_CRE = re.compile("^([a-zA-Z])(([0-9a-zA-Z!#$%&()*+;<=>?@^_`{|}~-]{5})+)$")
 }
 
 impl GitBinaryDiffParser {
@@ -61,11 +113,12 @@ impl GitBinaryDiffParser {
         }
     }
 
+    // return lines consumed in due to possible swallowing of blank line making len() unreliable for advancing index
     fn get_data_at(
         &self,
         lines: &[Line],
         start_index: usize,
-    ) -> DiffParseResult<GitBinaryDiffData> {
+    ) -> DiffParseResult<(GitBinaryDiffData, usize)> {
         let captures = if let Some(captures) = self.data_start_cre.captures(&lines[start_index]) {
             captures
         } else {
@@ -74,8 +127,8 @@ impl GitBinaryDiffParser {
                 start_index + 1,
             ));
         };
-        let method = captures.get(1).unwrap().as_str();
-        let size = usize::from_str(captures.get(2).unwrap().as_str())
+        let method = GitBinaryDiffMethod::from_str(captures.get(1).unwrap().as_str())?;
+        let len_raw = usize::from_str(captures.get(2).unwrap().as_str())
             .map_err(|e| DiffParseError::ParseNumberError(e, start_index + 1))?;
         let mut index = start_index + 1;
         while index < lines.len() && self.data_line_cre.is_match(&lines[index]) {
@@ -86,19 +139,18 @@ impl GitBinaryDiffParser {
         if index < lines.len() && self.blank_line_cre.is_match(&lines[index]) {
             index += 1;
         }
-        //let data_zipped = self.git_base85.decode_lines(&lines[start_index..end_data])?;
-        //dlines = lines[start_index:index]
-        //try:
-        //  data_zipped = gitbase85.decode_lines(lines[start_index + 1:end_data])
-        //except AssertionError:
-        //  raise DataError(_("Inconsistent git binary patch data."), lineno=start_index)
-        //raw_size = len(zlib.decompress(bytes(data_zipped)))
-        //if raw_size != size:
-        //  emsg = _("Git binary patch expected {0} bytes. Got {1} bytes.").format(size, raw_size)
-        //  raise DataError(emsg, lineno=start_index)
-        //return (GitBinaryDiffData(dlines, method, raw_size, data_zipped), index)
-
-        Ok(GitBinaryDiffData {})
+        let data_zipped = self
+            .git_base85
+            .decode_lines(&lines[start_index + 1..end_data])?;
+        Ok((
+            GitBinaryDiffData {
+                lines: lines[start_index..end_data].to_vec(),
+                method,
+                len_raw,
+                data_zipped,
+            },
+            index - start_index,
+        ))
     }
 
     pub fn get_diff_at(
@@ -110,10 +162,10 @@ impl GitBinaryDiffParser {
             return Ok(None);
         }
         let mut index = start_index + 1;
-        let forward = self.get_data_at(lines, index)?;
-        index += forward.len();
-        let reverse = self.get_data_at(lines, index)?;
-        index += reverse.len();
+        let (forward, lines_consumed) = self.get_data_at(lines, index)?;
+        index += lines_consumed;
+        let (reverse, lines_consumed) = self.get_data_at(lines, index)?;
+        index += lines_consumed;
         Ok(Some(GitBinaryDiff {
             lines: lines[start_index..index].to_vec(),
             forward,
@@ -124,8 +176,25 @@ impl GitBinaryDiffParser {
 
 #[cfg(test)]
 mod tests {
-    //use super::*;
+    use super::*;
+    use crate::lines::{Lines, LinesIfce};
+    use std::path::Path;
 
     #[test]
-    fn it_works() {}
+    fn get_git_binary_diff_at_works() {
+        let lines = Lines::read_from(&Path::new("../test_diffs/test_2.binary_diff")).unwrap();
+        let parser = GitBinaryDiffParser::new();
+        let result = parser.get_diff_at(&lines, 1);
+        assert!(result.is_ok());
+        assert!(!result.unwrap().is_some());
+
+        for start_index in &[2, 12, 21, 30, 39, 49] {
+            let result = parser.get_diff_at(&lines, *start_index);
+            assert!(result.is_ok());
+            let result = result.unwrap();
+            assert!(result.is_some());
+            let diff = result.unwrap();
+            assert!(diff.iter().count() == diff.len());
+        }
+    }
 }
