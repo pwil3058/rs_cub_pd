@@ -66,7 +66,10 @@ impl DiffParser {
         // try diff types in occurence likelihood order
         if let Some(result) = self.unified_diff_parser.get_diff_at(lines, start_index)? {
             Ok(Some(Diff::Unified(result)))
-        } else if let Some(result) = self.git_binary_diff_parser.get_diff_at(lines, start_index)? {
+        } else if let Some(result) = self
+            .git_binary_diff_parser
+            .get_diff_at(lines, start_index)?
+        {
             Ok(Some(Diff::GitBinary(result)))
         } else if let Some(result) = self.context_diff_parser.get_diff_at(lines, start_index)? {
             Ok(Some(Diff::Context(result)))

@@ -23,6 +23,7 @@ pub mod diff;
 pub mod diff_stats;
 pub mod git_base85;
 pub mod git_binary_diff;
+pub mod git_delta;
 pub mod lines;
 pub mod patch;
 pub mod preamble;
@@ -75,7 +76,7 @@ impl<'a, T> MultiListIter<'a, T> {
     pub fn append(&mut self, rhs: &mut MultiListIter<'a, T>) {
         let mut v = rhs.iters[rhs.current_iter..].to_vec();
         self.iters.append(&mut v);
-   }
+    }
 }
 
 impl<'a, T> Iterator for MultiListIter<'a, T> {
