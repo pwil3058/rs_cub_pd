@@ -20,7 +20,7 @@ use std::slice::Iter;
 use regex::Captures;
 
 use crate::abstract_diff::{AbstractDiff, AbstractHunk, ApplnResult};
-use crate::git_delta::DeltaError;
+use crate::git_binary_diff::git_delta::DeltaError;
 use crate::lines::*;
 use crate::DiffFormat;
 use crate::MultiListIter;

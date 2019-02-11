@@ -20,8 +20,10 @@ use std::str::FromStr;
 use inflate;
 use regex::Regex;
 
-use crate::git_base85::GitBase85;
-use crate::git_delta;
+pub mod git_base85;
+pub mod git_delta;
+
+use self::git_base85::GitBase85;
 use crate::lines::{Line, Lines};
 use crate::text_diff::{DiffParseError, DiffParseResult};
 use crate::DiffFormat;
