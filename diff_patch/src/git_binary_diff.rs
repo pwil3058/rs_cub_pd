@@ -16,6 +16,7 @@ use std::fmt;
 use std::slice::Iter;
 use std::str::FromStr;
 
+use inflate;
 use regex::Regex;
 
 use crate::git_base85::GitBase85;
@@ -71,6 +72,15 @@ impl GitBinaryDiffData {
 
     pub fn iter(&self) -> Iter<Line> {
         self.lines.iter()
+    }
+
+    pub fn get_raw_data(&self) -> DiffParseResult<Vec<u8>> {
+        let data = inflate::inflate_bytes_zlib(&self.data_zipped).map_err(|e| DiffParseError::ZLibInflateError(e))?;
+        if data.len() != self.len_raw {
+            let msg = format!("Inflated size {} doesn not match expected size {}", data.len(), self.len_raw);
+            return Err(DiffParseError::ZLibInflateError(msg));
+        }
+        Ok(data)
     }
 }
 
@@ -195,6 +205,8 @@ mod tests {
             assert!(result.is_some());
             let diff = result.unwrap();
             assert!(diff.iter().count() == diff.len());
+            assert!(diff.forward.get_raw_data().is_ok());
+            assert!(diff.reverse.get_raw_data().is_ok());
         }
     }
 }

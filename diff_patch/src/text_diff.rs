@@ -34,6 +34,7 @@ pub enum DiffParseError {
     UnexpectedInput(DiffFormat, String),
     SyntaxError(DiffFormat, usize),
     Base85Error(String),
+    ZLibInflateError(String)
 }
 
 pub type DiffParseResult<T> = Result<T, DiffParseError>;
