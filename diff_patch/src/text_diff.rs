@@ -20,6 +20,7 @@ use std::slice::Iter;
 use regex::Captures;
 
 use crate::abstract_diff::{AbstractDiff, AbstractHunk, ApplnResult};
+use crate::git_delta::DeltaError;
 use crate::lines::*;
 use crate::DiffFormat;
 use crate::MultiListIter;
@@ -34,7 +35,9 @@ pub enum DiffParseError {
     UnexpectedInput(DiffFormat, String),
     SyntaxError(DiffFormat, usize),
     Base85Error(String),
-    ZLibInflateError(String)
+    ZLibInflateError(String),
+    GitDeltaError(DeltaError),
+    IOError(io::Error),
 }
 
 pub type DiffParseResult<T> = Result<T, DiffParseError>;
@@ -107,6 +110,21 @@ where
             .collect();
         let abstract_diff = AbstractDiff::new(hunks);
         abstract_diff.apply_to_lines(lines, reverse, err_w, repd_file_path)
+    }
+
+    pub fn apply_to_contents<R, W>(
+        &mut self,
+        reader: &mut R,
+        reverse: bool,
+        err_w: &mut W,
+        repd_file_path: Option<&Path>,
+    ) -> DiffParseResult<ApplnResult>
+    where
+        R: io::Read,
+        W: io::Write,
+    {
+        let lines = Lines::read(reader).map_err(|e| DiffParseError::IOError(e))?;
+        Ok(self.apply_to_lines(&lines, reverse, err_w, repd_file_path))
     }
 }
 

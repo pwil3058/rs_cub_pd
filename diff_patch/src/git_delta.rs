@@ -12,8 +12,22 @@
 //See the License for the specific language governing permissions and
 //limitations under the License.
 
+use std::cell::Cell;
+use std::rc::Rc;
+
+#[derive(Debug)]
+pub enum DeltaError {
+    PatchError(String),
+    EmptyBuffer,
+    EmptySourceBuffer,
+    EmptyTargetBuffer,
+    InvalidDelta,
+    InvalidSourceSize,
+}
+
 const RABIN_SHIFT: usize = 23;
 const RABIN_WINDOW: usize = 16;
+const HASH_LIMIT: usize = 64;
 
 const TANGO: [u32; 256] = [
     0x00000000, 0xab59b4d1, 0x56b369a2, 0xfdeadd73, 0x063f6795, 0xad66d344, 0x508c0e37, 0xfbd5bae6,
@@ -50,7 +64,7 @@ const TANGO: [u32; 256] = [
     0x2a3b52f7, 0x8162e626, 0x7c883b55, 0xd7d18f84, 0x2c043562, 0x875d81b3, 0x7ab75cc0, 0xd1eee811,
 ];
 
-const UNIFORM: [u32; 256] = [
+const _UNIFORM: [u32; 256] = [
     0x00000000, 0x7eb5200d, 0x5633f4cb, 0x2886d4c6, 0x073e5d47, 0x798b7d4a, 0x510da98c, 0x2fb88981,
     0x0e7cba8e, 0x70c99a83, 0x584f4e45, 0x26fa6e48, 0x0942e7c9, 0x77f7c7c4, 0x5f711302, 0x21c4330f,
     0x1cf9751c, 0x624c5511, 0x4aca81d7, 0x347fa1da, 0x1bc7285b, 0x65720856, 0x4df4dc90, 0x3341fc9d,
@@ -85,91 +99,181 @@ const UNIFORM: [u32; 256] = [
     0x1400edeb, 0x6ab5cde6, 0x42331920, 0x3c86392d, 0x133eb0ac, 0x6d8b90a1, 0x450d4467, 0x3bb8646a,
 ];
 
-#[derive(Debug, Clone, Copy)]
-struct Entry {
-    offset: usize,
+#[derive(Debug)]
+pub struct Entry {
+    offset: Cell<usize>,
     val: usize,
 }
 
-struct DeltaIndex {}
+pub struct DeltaIndex<'a> {
+    _data: &'a [u8],
+    hash_mask: usize,
+    hash_buckets: Vec<Vec<Rc<Entry>>>,
+}
 
-impl DeltaIndex {
-    fn new(data: &[u8]) -> DeltaIndex {
-        //# Determine index hash size.  Note that indexing skips the
-        //# first byte to allow for optimizing the Rabin's polynomial
-        //# initialization in create_delta().
-        //# Current delta format can't encode offsets into
-        //# reference buffer with more than 32 bits.
+impl<'a> DeltaIndex<'a> {
+    pub fn new(data: &[u8]) -> DeltaIndex {
+        // Determine index hash size.  Note that indexing skips the
+        // first byte to allow for optimizing the Rabin's polynomial
+        // initialization in create_delta().
+        // Current delta format can't encode offsets into
+        // reference buffer with more than 32 bits.
         let num_entries = (data.len().min(0xFFFFFFFF) - 1) / RABIN_WINDOW;
-        //entries = (min(len(data), 0xFFFFFFFF) - 1) // RABIN_WINDOW
         let h_size = num_entries / 4;
-        //hsize = entries // 4
         let mut l_shft: usize = 4;
         while (1 << l_shft) < h_size && l_shft < 31 {
             l_shft += 1;
         }
         let h_size = 1 << l_shft;
-        //lshft = 4
-        //while (1 << lshft) < hsize and lshft < 31:
-        //    lshft += 1
-        //hsize = 1 << lshft
-        //#Create fields up front
+        //Create fields up front
         let hash_mask = h_size - 1;
-        let hash_bucket: Vec<Vec<Entry>> = vec![vec![]; h_size];
-        //self.data = bytearray(data)
-        //self._hash_mask = hsize - 1
-        //self._hash_bucket = [list() for x in range(hsize)]
-        //# Populate the index
-        let mut prev_entry: Option<&mut Entry> = None;
+        let mut hash_buckets: Vec<Vec<Rc<Entry>>> = vec![vec![]; h_size];
+        // Populate the index
         for offset in (0..num_entries * RABIN_WINDOW - RABIN_WINDOW).rev() {
             let data_slice = &data[offset..];
             let mut val: usize = 0;
             for index in 1..RABIN_WINDOW + 1 {
                 val = (((val << 8) & 0xFFFFFFFF) | data_slice[index] as usize)
                     ^ TANGO[val >> RABIN_SHIFT] as usize;
+                let hash_index = val & hash_mask;
+                if hash_buckets[hash_index].len() > 0 && hash_buckets[hash_index][0].val == val {
+                    // keep the lowest of consecutive identical blocks
+                    hash_buckets[hash_index][0]
+                        .offset
+                        .set(offset + RABIN_WINDOW);
+                } else {
+                    let entry = Rc::new(Entry {
+                        offset: Cell::new(offset + RABIN_WINDOW),
+                        val: val,
+                    });
+                    hash_buckets[hash_index].insert(0, entry);
+                }
             }
         }
-        //prev_entry = None
-        //data_ptr = c_idioms.Pointer(self.data, entries * RABIN_WINDOW - RABIN_WINDOW)
-        //while data_ptr:
-        //    val = 0
-        //    for index in range(1, RABIN_WINDOW + 1):
-        //        val = (((val << 8) & 0xFFFFFFFF) | data_ptr[index]) ^ TANGO[val >> RABIN_SHIFT]
-        //    if prev_entry and prev_entry.val == val:
-        //        //# keep the lowest of consecutive identical blocks
-        //        prev_entry.data_index = data_ptr + RABIN_WINDOW
-        //    else:
-        //        //# Unlike C version we can put them into the correct place
-        //        //# in the correct bucket correctly so we do.
-        //        prev_entry = DeltaIndex.Entry(data_ptr + RABIN_WINDOW, val)
-        //        self._hash_bucket[prev_entry.val & self._hash_mask].insert(0, prev_entry)
-        //    data_ptr -= RABIN_WINDOW
-        //# Determine a limit on the number of entries in the same hash
-        //# bucket.  This guards us against pathological data sets causing
-        //# really bad hash distribution with most entries in the same hash
-        //# bucket that would bring us to O(m*n) computing costs (m and n
-        //# corresponding to reference and target buffer sizes).
-        //#
-        //# Make sure none of the hash buckets has more entries than
-        //# we're willing to test.  Otherwise we cull the entry list
-        //# uniformly to still preserve a good repartition across
-        //# the reference buffer.
-        //for hash_bucket in self._hash_bucket:
-        //    if len(hash_bucket) <= DeltaIndex.HASH_LIMIT:
-        //        continue
-        //    //# We leave exactly DeltaIndex.HASH_LIMIT entries in the bucket
-        //    eindex = 1
-        //    acc = 0
-        //    acc_step = len(hash_bucket) - DeltaIndex.HASH_LIMIT
-        //    for _dummy in range(DeltaIndex.HASH_LIMIT):
-        //        acc += acc_step
-        //        while acc > 0:
-        //            del hash_bucket[eindex]
-        //            acc -= DeltaIndex.HASH_LIMIT
-        //        eindex += 1
-        //    assert len(hash_bucket) == DeltaIndex.HASH_LIMIT
-        DeltaIndex {}
+        // Determine a limit on the number of entries in the same hash
+        // bucket.  This guards us against pathological data sets causing
+        // really bad hash distribution with most entries in the same hash
+        // bucket that would bring us to O(m*n) computing costs (m and n
+        // corresponding to reference and target buffer sizes).
+        //
+        // Make sure none of the hash buckets has more entries than
+        // we're willing to test.  Otherwise we cull the entry list
+        // uniformly to still preserve a good repartition across
+        // the reference buffer.
+        for hash_bucket in hash_buckets.iter_mut() {
+            if hash_bucket.len() <= HASH_LIMIT {
+                continue;
+            }
+            // We leave exactly HASH_LIMIT entries in the bucket
+            let acc_step = hash_bucket.len() - HASH_LIMIT;
+            for index in 1..HASH_LIMIT + 1 {
+                let mut acc = acc_step;
+                loop {
+                    hash_bucket.remove(index);
+                    if acc > HASH_LIMIT {
+                        acc -= HASH_LIMIT;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            assert_eq!(hash_bucket.len(), HASH_LIMIT)
+        }
+        DeltaIndex {
+            _data: data,
+            hash_mask: hash_mask,
+            hash_buckets: hash_buckets,
+        }
     }
+
+    pub fn get_entries(&self, val: usize) -> &Vec<Rc<Entry>> {
+        &self.hash_buckets[val & self.hash_mask]
+    }
+}
+
+const DELTA_SIZE_MIN: usize = 4;
+
+pub fn get_delta_hdr_size(delta: &[u8]) -> Result<(usize, usize), DeltaError> {
+    let mut size = 0;
+    let mut lshft = 0;
+    let mut index = 0;
+    loop {
+        if index >= delta.len() {
+            return Err(DeltaError::InvalidDelta);
+        }
+        let cmd = delta[index] as usize;
+        index += 1;
+        size |= (cmd & 0x7F) << lshft;
+        lshft += 7;
+        if cmd & 0x80 == 0 {
+            break;
+        }
+    }
+    Ok((size, index))
+}
+
+pub fn patch_delta(source: &[u8], delta: &[u8]) -> Result<Vec<u8>, DeltaError> {
+    if delta.len() < DELTA_SIZE_MIN {
+        return Err(DeltaError::InvalidDelta);
+    }
+    let mut index = 0;
+    // make sure the source size matches what we expect
+    let (size, bytes_used) = get_delta_hdr_size(&delta[index..])?;
+    index += bytes_used;
+    if size != source.len() {
+        return Err(DeltaError::InvalidSourceSize);
+    }
+    // now the expected result size
+    let (expected_size, bytes_used) = get_delta_hdr_size(&delta[index..])?;
+    index += bytes_used;
+    let mut output: Vec<u8> = Vec::with_capacity(expected_size);
+    while index < delta.len() {
+        let cmd = delta[index];
+        index += 1;
+        if cmd & 0x80 != 0 {
+            let mut cp_offset: usize = 0;
+            let mut cp_size: usize = 0;
+            for (mask, lshift) in [0, 1, 2, 3].iter().map(|i| (0x01u8 << i, 8 * i)) {
+                if cmd & mask != 0u8 {
+                    cp_offset |= (delta[index] as usize) << lshift;
+                    index += 1;
+                }
+            }
+            for (mask, lshift) in [0, 1, 2].iter().map(|i| (0x01u8 << i, 8 * i)) {
+                if cmd & mask != 0u8 {
+                    cp_size |= (delta[index] as usize) << lshift;
+                    index += 1;
+                }
+            }
+            if cp_size == 0 {
+                cp_size = 0x10000;
+            }
+            output.extend(source[cp_offset..cp_offset + cp_size].iter());
+        } else if cmd != 0 {
+            if index > expected_size - output.len() {
+                break;
+            }
+            output.push(delta[index]);
+            index += 1;
+        } else {
+            // cmd == 0 is reserved for future encoding
+            // extensions. In the mean time we must fail when
+            // encountering them (might be data corruption).
+            return Err(DeltaError::PatchError(
+                "unexpected delta opcode 0".to_string(),
+            ));
+        }
+    }
+    if index < delta.len() || expected_size < output.len() {
+        let msg = format!(
+            "delta replay has gone wild {0}:{1}:{2}",
+            index,
+            expected_size,
+            output.len()
+        );
+        return Err(DeltaError::PatchError(msg));
+    }
+    Ok(output)
 }
 
 #[cfg(test)]
