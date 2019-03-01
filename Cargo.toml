@@ -3,5 +3,4 @@
 members = [
     "patch",
     "diff",
-    "diff_patch"
 ]
