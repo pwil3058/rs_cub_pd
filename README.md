@@ -1,2 +1,2 @@
-# rs_patch_lib
-Rust Patch Library
+# rs_cub_pd
+Rust Patch and Diff commands
